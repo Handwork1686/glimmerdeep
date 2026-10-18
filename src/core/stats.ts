@@ -8,7 +8,7 @@ export interface Stats {
   lastLight: boolean; // halve drain below 25%
   mossMul: number;
   amberMul: number;
-  kindling: number; // fuel per ore pickup
+  kindling: number; // fuel per ore tile mined
   secondWind: number; // relights available
   astral: number; // fuel restored on level-up
 

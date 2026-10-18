@@ -5,7 +5,7 @@ import { BoonDef, RARITY_COLOR } from '../data/boons';
 import { RELIC_BY_ID } from '../data/relics';
 import { SHARD_BY_ID, shardCodexKey, type ShardId } from '../data/shards';
 import { xpForLevel } from '../core/progression';
-import { potMultiplier, type SimEvent } from '../core/sim';
+import { drainCurve, potMultiplier, type SimEvent } from '../core/sim';
 import { Audio } from '../systems/audio';
 import { Controls } from '../systems/controls';
 import { Save } from '../systems/save';
@@ -23,6 +23,8 @@ export class HudScene extends Phaser.Scene {
   run!: RunScene;
   private lightBar!: Phaser.GameObjects.Graphics;
   private lightText!: Phaser.GameObjects.BitmapText;
+  /** how fast the lantern is burning: it climbs with depth and when you stall */
+  private drainText!: Phaser.GameObjects.BitmapText;
   private depthText!: Phaser.GameObjects.BitmapText;
   private biomeText!: Phaser.GameObjects.BitmapText;
   private goldText!: Phaser.GameObjects.BitmapText;
@@ -87,6 +89,7 @@ export class HudScene extends Phaser.Scene {
     this.add.image(10, 10, 'atlas', 'ico_light').setOrigin(0.5);
     this.lightBar = this.add.graphics();
     this.lightText = txt(this, 18, 15, '', COLORS.text).setOrigin(0, 0);
+    this.drainText = txt(this, 76, 15, '', COLORS.dim).setOrigin(0, 0);
     // Shard Bomb + dynamite
     this.shardBombIcon = this.add.image(11, 32, 'atlas', 'icon_shardbomb');
     this.shardBombFill = this.add.graphics();
@@ -226,7 +229,8 @@ export class HudScene extends Phaser.Scene {
   private onSim(e: SimEvent) {
     switch (e.t) {
       case 'biome':
-        this.showCard(e.name.toUpperCase(), `${this.run.sim.depth()} m`);
+        // the deep is thirstier: say so on the way in
+        this.showCard(e.name.toUpperCase(), `${this.run.sim.depth()} m   lantern burns x${drainCurve(this.run.sim.depth()).toFixed(1)}`);
         Audio.play('biome');
         break;
       case 'pickup':
@@ -304,6 +308,12 @@ export class HudScene extends Phaser.Scene {
     // lantern cap at the end of the bar
     this.lightBar.fillStyle(0xc98a2e).fillRect(19 + w, 6, 2, 8);
     this.lightText.setText(`${Math.ceil(Math.min(sim.light, sim.stats.maxLight))} / ${Math.ceil(sim.stats.maxLight)}`);
+    const rate = sim.drainRate();
+    const stalled = sim.stallMul > 1.05;
+    this.drainText
+      .setText(stalled ? `-${rate.toFixed(1)}/s STALLED` : `-${rate.toFixed(1)}/s`)
+      .setTint(stalled ? (Math.sin(this.time.now / 90) > 0 ? COLORS.red : COLORS.amber) : rate >= 3.5 ? COLORS.red : rate >= 2 ? COLORS.amber : COLORS.dim);
+    if (stalled) this.tip('stall');
     this.vignette.setAlpha(low ? 0.35 + 0.25 * Math.sin(this.lowPulse) : Math.max(0, this.vignette.alpha - dt));
     // one heartbeat per pulse, on the upward crossing
     const beat = Math.sin(this.lowPulse) > 0.95;

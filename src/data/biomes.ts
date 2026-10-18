@@ -13,7 +13,6 @@ export interface BiomeDef {
   /** scattered specials replacing solid tiles: [tile, chance] */
   scatter: [number, number][];
   cave: number; // 0..1 openness
-  drain: number; // lantern fuel drain multiplier: the deep is darker
   ambient: number; // background tint colour
   music: string;
   /** crystal that fills this biome's geode vaults */
@@ -30,7 +29,7 @@ export const BIOMES: BiomeDef[] = [
       { tile: T.quartz, perBand: 1.3, len: [2, 5], minT: 0.08 },
     ],
     scatter: [[T.lampmoss, 0.0045], [T.boulder, 0.004]],
-    cave: 0.32, ambient: 0x3c2420, music: 'rootsoil', drain: 1.0, geodeFill: T.quartz,
+    cave: 0.32, ambient: 0x3c2420, music: 'rootsoil', geodeFill: T.quartz,
   },
   {
     id: 'amberstone', name: 'Amberstone', from: 120, to: 300,
@@ -44,7 +43,7 @@ export const BIOMES: BiomeDef[] = [
       { tile: T.fossil, perBand: 0.45, len: [1, 2] },
     ],
     scatter: [[T.lampmoss, 0.0025], [T.boulder, 0.008]],
-    cave: 0.36, ambient: 0x6e4a32, music: 'amberstone', drain: 1.12, geodeFill: T.quartz,
+    cave: 0.36, ambient: 0x6e4a32, music: 'amberstone', geodeFill: T.quartz,
   },
   {
     id: 'grotto', name: 'Glimmer Grotto', from: 300, to: 520,
@@ -57,7 +56,7 @@ export const BIOMES: BiomeDef[] = [
       { tile: T.silver, perBand: 0.6, len: [2, 5] },
     ],
     scatter: [[T.lampmoss, 0.003], [T.amber, 0.003]],
-    cave: 0.42, ambient: 0x1a2352, music: 'grotto', drain: 1.28, geodeFill: T.glimmer,
+    cave: 0.42, ambient: 0x1a2352, music: 'grotto', geodeFill: T.glimmer,
   },
   {
     id: 'emberdeep', name: 'Emberdeep', from: 520, to: 760,
@@ -70,7 +69,7 @@ export const BIOMES: BiomeDef[] = [
       { tile: T.ember, perBand: 1.4, len: [1, 3] },
     ],
     scatter: [[T.ember, 0.005], [T.amber, 0.003]],
-    cave: 0.38, ambient: 0x3b0f22, music: 'emberdeep', drain: 1.45, geodeFill: T.glimmer,
+    cave: 0.38, ambient: 0x3b0f22, music: 'emberdeep', geodeFill: T.glimmer,
   },
   {
     id: 'hollow', name: 'The Hollow', from: 760, to: 1050,
@@ -83,7 +82,7 @@ export const BIOMES: BiomeDef[] = [
       { tile: T.ember, perBand: 0.8, len: [1, 3] },
     ],
     scatter: [[T.amber, 0.004], [T.lampmoss, 0.002]],
-    cave: 0.45, ambient: 0x2a0f3c, music: 'hollow', drain: 1.65, geodeFill: T.voidglass,
+    cave: 0.45, ambient: 0x2a0f3c, music: 'hollow', geodeFill: T.voidglass,
   },
   {
     id: 'mantle', name: 'The Mantle', from: 1050, to: 1500,
@@ -96,7 +95,7 @@ export const BIOMES: BiomeDef[] = [
       { tile: T.heartstone, perBand: 0.12, len: [1, 1], minT: 0.5 },
     ],
     scatter: [[T.amber, 0.004], [T.ember, 0.004]],
-    cave: 0.4, ambient: 0x3b0f22, music: 'mantle', drain: 1.8, geodeFill: T.moonstone,
+    cave: 0.4, ambient: 0x3b0f22, music: 'mantle', geodeFill: T.moonstone,
   },
   {
     id: 'heart', name: "The World's Heart", from: 1500, to: 99999,
@@ -110,7 +109,7 @@ export const BIOMES: BiomeDef[] = [
       { tile: T.prism, perBand: 0.5, len: [1, 2] },
     ],
     scatter: [[T.amber, 0.005]],
-    cave: 0.44, ambient: 0x6b3410, music: 'heart', drain: 2.0, geodeFill: T.heartstone,
+    cave: 0.44, ambient: 0x6b3410, music: 'heart', geodeFill: T.heartstone,
   },
 ];
 

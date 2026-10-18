@@ -11,6 +11,7 @@ import { bankRun } from '../../src/systems/bank';
 import { newSave } from '../../src/systems/save';
 
 const RUNS = Number(process.argv[2] ?? 120);
+const DIAG = !!process.env.DIAG;
 const CAMP_OVERHEAD = 25; // seconds spent in the workshop per run
 const save = newSave();
 const stallGaps: number[] = [];
@@ -51,6 +52,7 @@ for (let r = 0; r < RUNS; r++) {
   const bot = new Bot();
   let steps = 0;
   const breaks: number[] = [];
+  const diag: Record<string, number> = {};
   let frontierT = 0;
   while (!sim.over && steps < 60 * 900) {
     if (sim.pendingLevels > 0) {
@@ -58,13 +60,17 @@ for (let r = 0; r < RUNS; r++) {
       if (h && h.length) sim.choose(h[0].id);
     }
     sim.step(bot.think(sim));
-    for (const e of sim.drainEvents()) if (e.t === 'break') breaks.push(sim.time);
+    for (const e of sim.drainEvents()) if (e.t === 'break') {
+      breaks.push(sim.time);
+      if (DIAG) diag[e.src] = (diag[e.src] ?? 0) + 1;
+    }
     // "power frontier": the last moment the bot was still breaking >= 6 tiles per 10 s
     while (breaks.length && breaks[0] < sim.time - 10) breaks.shift();
     if (breaks.length >= 6) frontierT = sim.time;
     steps++;
   }
   const sum = sim.summary();
+  if (DIAG) console.log('   diag', JSON.stringify(diag), JSON.stringify(sum.shardTypes), JSON.stringify(sum.boons), JSON.stringify(save.upgrades));
   if (sum.reason === 'dark') stallGaps.push(sum.time - frontierT);
   if (r < 4 || sum.time > 300) console.log("   light:", JSON.stringify(Object.fromEntries(Object.entries(sim.lightLog).map(([k, v]) => [k, Math.round(v)]))), "max", Math.round(sim.stats.maxLight), "drain", sim.stats.lightDrain.toFixed(2));
   clock += sum.time + CAMP_OVERHEAD;

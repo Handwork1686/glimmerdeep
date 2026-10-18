@@ -31,7 +31,7 @@ export const BOONS: BoonDef[] = [
   b({ id: 'steady', name: 'Steady Wick', desc: 'Fuel drains 10% slower.', icon: 'drain', rarity: 'common', max: 3, apply: (s, k) => { s.lightDrain *= Math.pow(0.9, k); } }),
   b({ id: 'shrapnel', name: 'Shrapnel', desc: 'Shard bursts throw 20% more shards.', icon: 'bomb', rarity: 'common', max: 3, apply: (s, k) => { s.burstBonus += 0.2 * k; } }),
   b({ id: 'longfuse', name: 'Long Fuse', desc: 'Chains last 0.25 s longer.', icon: 'clock', rarity: 'common', max: 3, apply: (s, k) => { s.chainTime += 0.25 * k; } }),
-  b({ id: 'kindling', name: 'Kindling', desc: 'Ore pickups restore 0.05 fuel.', icon: 'plus', rarity: 'common', max: 3, apply: (s, k) => { s.kindling += 0.05 * k; } }),
+  b({ id: 'kindling', name: 'Kindling', desc: 'Chain links refuel 25% more.', icon: 'chain', rarity: 'common', max: 3, apply: (s, k) => { s.chainFuel *= 1 + 0.25 * k; } }),
   // rare
   b({ id: 'widebit', name: 'Wide Bit', desc: 'Drilling also hits side tiles for 50%.', icon: 'drill', rarity: 'rare', max: 2, apply: (s, k) => { s.wideBit += 0.5 * k; } }),
   b({ id: 'echo', name: 'Echo Drill', desc: 'Every 4th hit strikes three times.', icon: 'speed', rarity: 'rare', max: 1, apply: (s) => { s.echoEvery = s.echoEvery ? Math.min(s.echoEvery, 3) : 4; } }),

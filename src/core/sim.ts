@@ -190,6 +190,10 @@ export interface SimConfig {
 const G = 900;
 const MAX_FALL = 330;
 const COYOTE = 0.09;
+/** shards thrown by tiles that shards broke thin out as a chain grows past a few hundred links */
+export const cascadeDamp = (chain: number) => 1 / (1 + Math.max(0, chain - 300) / 600);
+/** tiles broken this many generations into a cascade throw no more shards */
+const CASCADE_MAX_GEN = 8;
 /** pickups this close home in at once; everything homes after AUTO_HOME seconds */
 const AUTO_PULL = 30;
 const AUTO_HOME = 2.5;
@@ -198,10 +202,31 @@ const STEER_RATE = 5;
 const CRYSTAL_SHARDS = new Set<ShardId>(['glass', 'crystal', 'void', 'prism']);
 const CORNER_ASSIST = [-1, -2, -3, -4, 1, 2, 3, 4];
 const CORNER_ASSIST_AIR = [-1, -2, -3, -4, -5, -6, 1, 2, 3, 4, 5, 6];
-/** chain pot multiplier for a chain of n links */
+/** chain pot multiplier for a chain of n links: grows with the square root, then (past 1500 links) only slowly */
+export const POT_SOFTCAP = 1500;
 export function potMultiplier(n: number, growth: number): number {
-  return 1 + growth * Math.sqrt(n);
+  const k = n <= POT_SOFTCAP ? Math.sqrt(n) : Math.sqrt(POT_SOFTCAP) * (1 + Math.log(n / POT_SOFTCAP) / 2);
+  return 1 + growth * k;
 }
+
+/**
+ * The lantern burns faster the deeper you are: about as forgiving as ever in the
+ * Rootsoil, thirsty in the Grotto, ravenous at the Heart and below.
+ */
+export const DRAIN_K = 520;
+export const DRAIN_P = 1.35;
+export function drainCurve(depth: number): number {
+  return 1 + Math.pow(Math.max(0, depth) / DRAIN_K, DRAIN_P);
+}
+/** fuel you earn by mining is worth less the deeper you are, so the deep stays a threat */
+export const deepTaper = (depth: number) => 1 / (1 + Math.max(0, depth) / 700);
+/** chain links refuel less the deeper you are and the longer the chain, so chains never make fuel endless */
+export function chainRefuel(chainFuel: number, chain: number, depth: number): number {
+  return ((chainFuel * 60) / (60 + chain)) * deepTaper(depth);
+}
+/** drilling with nothing breaking for this long, the lantern stops waiting */
+export const STALL_GRACE = 2.5;
+export const STALL_MAX = 1.5;
 
 export class Sim {
   /** the open world: generated chunk by chunk as the Wick goes */
@@ -266,8 +291,11 @@ export class Sim {
   private sealDenyT = 0;
   private sealsShattered = new Set<number>();
   secondWindsUsed = 0;
+  /** when the last tile broke (for the stall drain) */
+  lastBreakT = 0;
+  /** current stall drain multiplier (1 = not stalled) */
+  stallMul = 1;
   private currentBiome = '';
-  private lowLightWarned = false;
 
   constructor(cfg: SimConfig) {
     this.cfg = cfg;
@@ -381,6 +409,13 @@ export class Sim {
     return this.solidAt(Math.floor(px / TILE), Math.floor(py / TILE));
   }
 
+  /** fuel burned per second right now (depth, pressure, stall and Last Light included) */
+  drainRate(): number {
+    let drain = this.stats.lightDrain * this.gloom.drainMul * drainCurve(this.depth()) * this.stallMul;
+    if (this.stats.lastLight && this.lightFrac() < 0.25) drain *= 0.5;
+    return drain;
+  }
+
   lightFrac(): number {
     return Math.max(0, Math.min(1, this.light / this.stats.maxLight));
   }
@@ -450,6 +485,7 @@ export class Sim {
     const tile = this.tileAt(x, y);
     const def = TILES[tile];
     this.world.set(x, y, T.air);
+    this.lastBreakT = this.time;
     // every cascade break is a link; so is every ore, crystal or gem you drill
     const cascade = src === 'shard' || src === 'wave';
     const valuable = this.isValuable(tile) || tile === T.seal || tile === T.geode;
@@ -457,7 +493,8 @@ export class Sim {
     if (linked) this.link();
     this.emit({ t: 'tile', x, y });
     this.emit({ t: 'break', x, y, tile, src, chain: linked ? this.chain : 0 });
-    this.gainXp(def.xp);
+    // plain rock knocked loose by a cascade teaches you little: XP comes from what you dig and what you find
+    this.gainXp(cascade && !valuable ? def.xp * 0.15 : def.xp);
     const cx = x * TILE + 8;
     const cy = y * TILE + 8;
     const depth = depthOfRow(y);
@@ -476,6 +513,7 @@ export class Sim {
       for (let k = 0; k < count; k++) this.spawnPickup(def.drop.kind, cx, cy, { gold: per * goldMul });
       if (this.chain > 0) this.potGold += per * goldMul * count;
       this.ores[def.drop.kind] = (this.ores[def.drop.kind] ?? 0) + count;
+      if (this.stats.kindling > 0) this.addLight(this.stats.kindling * deepTaper(depth), 'kindling');
       if (this.stats.gemChance > 0 && this.rng.chance(this.stats.gemChance)) this.spawnPickup('sapphire', cx, cy, { gems: 1 });
     }
     if (def.gems) {
@@ -505,7 +543,7 @@ export class Sim {
     else if (def.shards) this.spawnShards(cx, cy, def.shardType ?? 'glass', def.shards, { power: def.shardPower, gen });
     else if (tile === T.seal && src === 'wave' && this.rng.chance(0.34)) this.spawnShards(cx, cy, 'rune', 1, { exact: true, gen });
     // fault shards never crack more fault lines: plain rock would cascade forever
-    else if (!def.ore && !def.light && tile !== T.seal && by !== 'fault' && this.stats.faultChance > 0 && this.rng.chance(Math.min(0.3, this.stats.faultChance))) {
+    else if (!def.ore && !def.light && tile !== T.seal && by !== 'fault' && gen <= 1 && this.stats.faultChance > 0 && this.rng.chance(Math.min(0.3, this.stats.faultChance))) {
       this.spawnShards(cx, cy, 'fault', 2, { gen });
     }
     if (def.ore && by !== 'vein' && this.stats.veinRupture > 0 && this.rng.chance(Math.min(0.9, this.stats.veinRupture))) this.rupture(x, y, tile);
@@ -523,13 +561,13 @@ export class Sim {
     this.chainTimer = this.stats.chainTime;
     this.bestChain = Math.max(this.bestChain, this.chain);
     // long chains refuel a little less per link, so a dig still ends
-    this.addLight((this.stats.chainFuel * 60) / (60 + this.chain), 'chain');
+    this.addLight(chainRefuel(this.stats.chainFuel, this.chain, this.depth()), 'chain');
     this.emit({ t: 'chainLink', count: this.chain });
     if (this.stats.resonance > 0) {
       this.chainLinksForResonance++;
       if (this.chainLinksForResonance >= 10) {
         this.chainLinksForResonance = 0;
-        this.addLight(this.stats.resonance, 'resonance');
+        this.addLight(this.stats.resonance * deepTaper(this.depth()) * (60 / (60 + this.chain)) * 3, 'resonance');
       }
     }
     if (this.stats.cataclysm) {
@@ -655,6 +693,12 @@ export class Sim {
     const s = this.stats;
     let count = o.exact ? base : base + s.shardBonus;
     if (!o.exact && (o.burst ?? type.burstSource)) count *= 1 + s.burstBonus;
+    const gen = o.gen ?? 0;
+    if (gen > 0) {
+      // a cascade set off by shards: the rock is spent after a while, so it burns out instead of running forever
+      if (gen > CASCADE_MAX_GEN) return 0;
+      count *= cascadeDamp(this.chain);
+    }
     count = Math.round(count);
     if (count <= 0) return 0;
     const n = Math.max(0, Math.min(count, MAX_PER_BURST, MAX_ACTIVE_SHARDS - this.shards.length));
@@ -737,10 +781,9 @@ export class Sim {
     this.gems += pk.gems;
     this.cores += pk.cores;
     if (pk.light) {
-      this.addLight(pk.light, 'orb');
+      this.addLight(pk.light * deepTaper(this.depth()), 'orb');
       this.lightPickups++;
     }
-    if (pk.gold > 0 && this.stats.kindling > 0) this.addLight(this.stats.kindling, 'kindling');
     this.emit({ t: 'pickup', kind: pk.kind, gold: pk.gold, gems: pk.gems, cores: pk.cores, light: pk.light, x: pk.x, y: pk.y });
   }
 
@@ -750,7 +793,6 @@ export class Sim {
   addLight(v: number, src = 'other') {
     this.lightLog[src] = (this.lightLog[src] ?? 0) + Math.max(0, Math.min(v, this.stats.maxLight - this.light));
     this.light = Math.min(this.stats.maxLight, this.light + v);
-    if (this.light > this.stats.maxLight * 0.3) this.lowLightWarned = false;
   }
 
   gainXp(v: number) {
@@ -850,12 +892,11 @@ export class Sim {
     this.stepPlayer(input, dt);
 
     // light drain
-    let drain = this.stats.lightDrain * this.gloom.drainMul * biomeAt(this.depth()).drain;
-    if (this.stats.lastLight && this.lightFrac() < 0.25) drain *= 0.5;
-    this.light -= drain * dt;
-    if (!this.lowLightWarned && this.lightFrac() < 0.2) {
-      this.lowLightWarned = true;
-    }
+    // drilling and breaking nothing (no chain alive either): the lantern won't wait
+    const stalled = p.drill !== null && this.chain === 0 && this.time - this.lastBreakT > STALL_GRACE;
+    const target = stalled ? Math.min(STALL_MAX, 1 + (this.time - this.lastBreakT - STALL_GRACE) * (STALL_MAX - 1)) : 1;
+    this.stallMul += (target - this.stallMul) * Math.min(1, dt * 6);
+    this.light -= this.drainRate() * dt;
     if (this.light <= 0) {
       if (this.stats.secondWind - this.secondWindsUsed > 0) {
         this.secondWindsUsed++;
