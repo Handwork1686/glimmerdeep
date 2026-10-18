@@ -56,6 +56,8 @@ export interface Stats {
   fossilBonus: number;
   xpMul: number;
   survey: number;
+  /** extra rows the relic pointer reaches */
+  surveyRange: number;
   midas: boolean;
   midasTouch: number; // chance rock drops a gold nugget
 
@@ -80,7 +82,7 @@ export function baseStats(): Stats {
     shardBonus: 0, shardDamage: 6, shardSpeed: 1, shardPierce: 0, shardSplit: 0, burstBonus: 0, faultChance: 0, veinRupture: 0,
     emberSplit: 0, cinnabarMul: 1, ricochet: 0,
     chainPot: 0.06, chainTime: 1.2, chainFuel: 0.06, resonance: 0, cataclysm: false, cataclysmEvery: 25, prismHeart: false, supernova: false,
-    goldMul: 1, doubleOre: 0, gemChance: 0, deepPockets: 0, costMul: 1, fossilBonus: 0, xpMul: 1, survey: 0, midas: false, midasTouch: 0,
+    goldMul: 1, doubleOre: 0, gemChance: 0, deepPockets: 0, costMul: 1, fossilBonus: 0, xpMul: 1, survey: 0, surveyRange: 0, midas: false, midasTouch: 0,
     bombCooldown: 10, dynamite: 0, boonEcho: 0, drones: 0, boonChoices: 3, rerolls: 0, banishes: 0, headStart: 0,
     luck: 0, prospect: { ...NO_PROSPECT },
   };

@@ -11,7 +11,7 @@ const save = {
   version: 5, gold: 48200, gems: 63, cores: 2,
   upgrades: { root: 1, oil: 5, steady: 4, lens: 3, mosslore: 2, reserve: 2, recycler: 2, bit: 5, gearing: 5, pulverize: 3, diamond: 3, prospect: 2, widebit: 1,
     treads: 4, gyro: 3, thrusters: 3, heatsink: 3, auger: 1, longfuse: 2, brittle: 4, keen: 4, bounty: 3, fault: 2, volatile: 1, rupture: 1, appraise: 5, lucky: 3, assay: 2, gemsense: 2, deeppockets: 1,
-    draw: 2, echoes: 2, shrapnel: 2, reroll: 1, dynamite: 2 },
+    draw: 2, echoes: 2, shrapnel: 2, reroll: 1, dynamite: 2, shardveins: 3, geodesense: 2, caverns: 1 },
   maxDepth: 640, sealsBroken: [300, 520], gloom: 0, maxGloom: 0, seedCounter: 40,
   stats: { runs: 38, totalGold: 410000, totalGems: 120, bombs: 260, bestChain: 412, playTime: 6000, nodesBought: 90, longestRun: 280, mythics: 1, maxBoons: 9, endless: 0, bestPot: 18400, seals: 2, geodes: 9, hearts: 0 },
   codex: { copper: 900, tin: 300, quartz: 700, silver: 400, amber: 120, jade: 40, fossil: 12, gold: 260, glimmer: 380, sapphire: 18, opal: 30, fireopal: 50, ruby: 4 },
@@ -31,8 +31,8 @@ await wait(3500);
 await grab('title');
 await tap('Enter'); await wait(1500);
 await grab('camp');
-// Workshop is the 4th menu item
-for (let i = 0; i < 3; i++) await tap('ArrowDown');
+// Workshop is the 3rd menu item
+for (let i = 0; i < 2; i++) await tap('ArrowDown');
 await tap('Enter'); await wait(600);
 await tap('ArrowDown'); await wait(300); await tap('ArrowRight'); await wait(700);
 await grab('workshop');

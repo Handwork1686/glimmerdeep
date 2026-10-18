@@ -89,5 +89,5 @@ export function rollBoons(rng: Rng, count: number, owned: Record<string, number>
 
 export function xpForLevel(level: number): number {
   // level 1 -> 2 needs 10 xp; grows ~28% per level
-  return Math.round(10 * Math.pow(1.28, level - 1));
+  return Math.round(10 * Math.pow(1.3, level - 1));
 }

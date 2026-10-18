@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { VIEW_H, VIEW_W } from '../config';
 import { SEALS } from '../data/biomes';
-import { BRANCH_ANGLE, BRANCH_COLOR, BRANCH_NAME, costOf, isAvailable, UPGRADE_BY_ID, UPGRADES, UpgradeNode } from '../data/upgrades';
+import { BRANCH_ANGLE, BRANCH_COLOR, BRANCH_HINT, BRANCH_NAME, costOf, isAvailable, UPGRADE_BY_ID, UPGRADES, UpgradeNode } from '../data/upgrades';
 import { computeStats, GLOOM_DESCRIPTIONS } from '../core/progression';
 import { RELICS } from '../data/relics';
 import { checkAll } from '../systems/achievements';
@@ -12,6 +12,7 @@ import { COLORS, fadeTo, fmt, Menu, panel, txt, wrap } from '../ui/widgets';
 import { showToasts } from '../ui/toasts';
 import { fmtKeys, S as STR } from '../data/strings';
 import type { Stats } from '../core/stats';
+import type { Prospect } from '../core/worldgen';
 
 const D = 46;
 const S = 36;
@@ -43,7 +44,7 @@ const LINES = [
 
 const STAT_LINES: [keyof Stats, string, (v: number) => string][] = [
   ['maxLight', 'Lantern fuel', (v) => v.toFixed(0)],
-  ['lightDrain', 'Drain', (v) => `${v.toFixed(2)}/s`],
+  ['lightDrain', 'Drain', (v) => `${Math.max(0.4, v).toFixed(2)}/s`],
   ['lightRadius', 'Light radius', (v) => `${Math.round(v * 100)}%`],
   ['drillPower', 'Drill power', (v) => v.toFixed(1).replace(/\.0$/, '')],
   ['drillRate', 'Drill speed', (v) => `${v.toFixed(1)}/s`],
@@ -77,7 +78,25 @@ const STAT_LINES: [keyof Stats, string, (v: number) => string][] = [
   ['gemChance', 'Gem chance', (v) => `${Math.round(v * 100)}%`],
 ];
 
-/** "Drill power 5 -> 6" lines for the next level of a node. */
+const pct = (v: number) => `+${Math.round(v * 100)}%`;
+/** world-shaping stats: what newly generated ground holds */
+const WORLD_LINES: [keyof Prospect, string, (v: number) => string][] = [
+  ['shards', 'Shard sources', pct],
+  ['geodes', 'Geodes', pct],
+  ['caves', 'Caves', pct],
+  ['ores', 'Ore veins', pct],
+  ['flora', 'Moss and amber', pct],
+  ['relicSense', 'Relic sense', (v) => `${v}`],
+  ['rich', 'Rich ground', (v) => `${Math.round(Math.min(0.15, v) * 100)}%`],
+];
+
+/** one line summing up how the player has shaped the world, or '' */
+function worldLine(st: Stats): string {
+  const parts = WORLD_LINES.filter(([k]) => st.prospect[k] > 0).map(([k, label, f]) => `${label} ${f(st.prospect[k])}`);
+  return parts.join(', ');
+}
+
+/** "Drill power 5 -> 6" lines for the next level of a node (up to three). */
 function statDelta(id: string, owned: Record<string, number>): string[] {
   const now = computeStats(owned, {}, Save.data.relics);
   const next = computeStats({ ...owned, [id]: (owned[id] ?? 0) + 1 }, {}, Save.data.relics);
@@ -86,7 +105,12 @@ function statDelta(id: string, owned: Record<string, number>): string[] {
     const a = now[k] as number;
     const b = next[k] as number;
     if (typeof a === 'number' && Math.abs(a - b) > 1e-6 && f(a) !== f(b)) out.push(`${label} ${f(a)} > ${f(b)}`);
-    if (out.length >= 2) break;
+    if (out.length >= 3) break;
+  }
+  for (const [k, label, f] of WORLD_LINES) {
+    const a = now.prospect[k];
+    const b = next.prospect[k];
+    if (out.length < 3 && f(a) !== f(b)) out.push(`${label} ${f(a)} > ${f(b)}`);
   }
   return out;
 }
@@ -372,20 +396,26 @@ export class CampScene extends Phaser.Scene {
         ['Drill speed', `${st.drillRate.toFixed(1)}/s`],
         ['Relics', `${Save.data.relics.length} / ${RELICS.length}`],
         ['Deepest', `${Save.data.maxDepth} m`],
+        ['Best chain', `${fmt(Save.data.stats.bestChain)}`],
       ];
       this.info.add(txt(this, 0, 0, 'THE WICK', COLORS.gold));
       lines.forEach(([a, b], i) => {
         this.info.add(txt(this, 0, 14 + i * 11, a, COLORS.dim, false));
         this.info.add(txt(this, W, 14 + i * 11, b, COLORS.text, false).setOrigin(1, 0));
       });
-      if (Save.data.gloom > 0) this.info.add(txt(this, 0, 74, wrap(this, GLOOM_DESCRIPTIONS[Save.data.gloom], W), COLORS.violet, false));
+      const world = worldLine(st);
+      if (world) this.info.add(txt(this, 0, 82, wrap(this, `World: ${world}`, W), COLORS.green, false));
+      else if (Save.data.gloom > 0) this.info.add(txt(this, 0, 82, wrap(this, GLOOM_DESCRIPTIONS[Save.data.gloom], W), COLORS.violet, false));
       return;
     }
     const n = UPGRADE_BY_ID[this.sel];
     const lvl = Save.data.upgrades[n.id] ?? 0;
     this.info.add(txt(this, 0, 0, n.name, BRANCH_COLOR[n.branch]));
     this.info.add(txt(this, 0, 12, n.id === 'root' ? 'Origin' : n.infinite ? `Refinement  -  level ${lvl}` : `${BRANCH_NAME[n.branch]}  -  ${lvl}/${n.max}`, COLORS.dim, false));
-    this.info.add(txt(this, 0, 26, wrap(this, n.desc, W), COLORS.text, false));
+    // the first node of a branch says what kind of play the branch opens up
+    const desc = n.pos[0] === 1 && !n.infinite && n.branch !== 'core' ? `${n.desc}\n${BRANCH_HINT[n.branch]}` : n.desc;
+    const body = txt(this, 0, 26, wrap(this, desc, W), COLORS.text, false);
+    this.info.add(body);
     if (n.id === 'root') return;
     if (lvl >= n.max) {
       this.info.add(txt(this, 0, 76, STR.camp.mastered, COLORS.gold));
@@ -397,12 +427,13 @@ export class CampScene extends Phaser.Scene {
     }
     const { c } = this.canAfford(n, lvl);
     const s = Save.data;
-    let y = 64;
+    let y = Math.max(64, 30 + body.height);
     for (const line of statDelta(n.id, s.upgrades)) {
       this.info.add(txt(this, 0, y, line, COLORS.teal, false));
       y += 10;
     }
     y = Math.max(y + 4, 84);
+    if (y > 150) y = 150;
     const row = (icon: string, have: number, need: number, color: number) => {
       this.info.add(this.add.image(4, y + 4, 'atlas', icon));
       this.info.add(txt(this, 12, y, fmt(need), have >= need ? color : COLORS.red));

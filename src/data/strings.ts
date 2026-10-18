@@ -21,6 +21,7 @@ export const S = {
     workshop: 'Spend what you found in the Workshop, then dig again.',
     sealOpen: 'Broken seals stay broken. Every dig starts at the surface, and your drill tears through what you have already conquered.',
     stall: "If you can't break it, the lantern won't wait. Drilling and breaking nothing burns fuel faster: find softer rock or a shard.",
+    rich: 'Rich ground! This stretch holds twice the shard sources, geodes and ore.',
     farOut: 'The deep goes on sideways forever. The Heart lies under the shaft: the marker points home.',
   },
   cards: {

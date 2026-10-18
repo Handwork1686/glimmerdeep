@@ -31,7 +31,7 @@ export const RELICS: RelicDef[] = [
   r({ id: 'geodeheart', name: 'Singing Geode', biome: 'grotto', lore: 'Hold it to your ear: it hums the Grotto\'s note.', perk: 'Chain pot grows 5% faster', apply: (s) => { s.chainPot *= 1.05; } }),
   r({ id: 'mirror', name: 'Mirror Shard', biome: 'grotto', lore: 'Your reflection in it is always smiling.', perk: '+5% light radius', apply: (s) => { s.lightRadius += 0.05; } }),
   r({ id: 'bluebell', name: 'Crystal Bell', biome: 'grotto', lore: 'Its ring makes nearby crystal tremble.', perk: 'Shards deal +10% damage', apply: (s) => { s.shardDamage *= 1.1; } }),
-  r({ id: 'mapcase', name: 'Cartographer\'s Case', biome: 'grotto', lore: 'Maps of tunnels nobody has dug yet.', perk: '+5% experience', apply: (s) => { s.xpMul += 0.05; } }),
+  r({ id: 'mapcase', name: 'Cartographer\'s Case', biome: 'grotto', lore: 'Maps of tunnels nobody has dug yet.', perk: '+1 Relic Sense: relics lie nearer, the pointer reaches farther', apply: (s) => { s.prospect.relicSense += 1; s.surveyRange += 30; } }),
   // Emberdeep
   r({ id: 'forgecoal', name: 'Undying Coal', biome: 'emberdeep', lore: 'It has been burning since the world was young.', perk: '+8 lantern fuel', apply: (s) => { s.maxLight += 8; } }),
   r({ id: 'anvil', name: 'Thumb Anvil', biome: 'emberdeep', lore: 'Small enough for a pocket. Heavy as a promise.', perk: '+3% drill power', apply: (s) => { s.drillPower *= 1.03; } }),
@@ -44,7 +44,7 @@ export const RELICS: RelicDef[] = [
   r({ id: 'hourglass', name: 'Still Hourglass', biome: 'hollow', lore: 'The sand inside refuses to fall.', perk: 'Chains last +0.15 s', apply: (s) => { s.chainTime += 0.15; } }),
   // Mantle
   r({ id: 'crown', name: 'Magma Crown', biome: 'mantle', lore: 'Made for a head far larger than yours.', perk: '+8% gold', apply: (s) => { s.goldMul += 0.08; } }),
-  r({ id: 'chalice', name: 'Molten Chalice', biome: 'mantle', lore: 'Whatever it held, it held it hot.', perk: 'Gem sources +1 gem 10% of the time', apply: (s) => { s.gemChance += 0.01; } }),
+  r({ id: 'chalice', name: 'Molten Chalice', biome: 'mantle', lore: 'Whatever it held, it held it hot.', perk: 'Ore has +1% chance to drop a gem', apply: (s) => { s.gemChance += 0.01; } }),
   r({ id: 'gearheart', name: 'Clockwork Heart', biome: 'mantle', lore: 'Tick. Tick. Tick. It has never stopped.', perk: '+5% drill speed', apply: (s) => { s.drillRate *= 1.05; } }),
   r({ id: 'sunstone', name: 'Sunstone', biome: 'mantle', lore: 'A little of the Heart\'s light, broken off.', perk: 'Chain pot grows 8% faster', apply: (s) => { s.chainPot *= 1.08; } }),
 ];

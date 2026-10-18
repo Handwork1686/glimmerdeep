@@ -1,6 +1,6 @@
 import type { Stats } from '../core/stats';
 
-export type Branch = 'core' | 'light' | 'drill' | 'hull' | 'shatter' | 'fortune' | 'arcana';
+export type Branch = 'core' | 'light' | 'drill' | 'hull' | 'shatter' | 'fortune' | 'arcana' | 'world';
 
 export interface Cost {
   gold: number;
@@ -30,15 +30,20 @@ export interface UpgradeNode {
 
 const n = (o: Omit<UpgradeNode, 'growth'> & { growth?: number }): UpgradeNode => ({ growth: 1.85, ...o });
 
+/** seven spokes, evenly spaced around the Lantern */
+const SPOKE = 360 / 7;
 export const BRANCH_ANGLE: Record<Branch, number> = {
   core: 0,
   light: -90,
-  drill: -30,
-  hull: 30,
-  shatter: 90,
-  fortune: 150,
-  arcana: 210,
+  drill: -90 + SPOKE,
+  hull: -90 + SPOKE * 2,
+  shatter: -90 + SPOKE * 3,
+  fortune: -90 + SPOKE * 4,
+  arcana: -90 + SPOKE * 5,
+  world: -90 + SPOKE * 6,
 };
+/** the Refine nodes sit between the spokes */
+const between = (k: number) => -90 + SPOKE * (k + 0.5);
 
 export const BRANCH_COLOR: Record<Branch, number> = {
   core: 0xffd877,
@@ -48,6 +53,7 @@ export const BRANCH_COLOR: Record<Branch, number> = {
   shatter: 0x5fe0c4,
   fortune: 0xf7b740,
   arcana: 0xb862de,
+  world: 0x6aaa4a,
 };
 
 export const BRANCH_NAME: Record<Branch, string> = {
@@ -58,16 +64,29 @@ export const BRANCH_NAME: Record<Branch, string> = {
   shatter: 'Shatter',
   fortune: 'Fortune',
   arcana: 'Arcana',
+  world: 'World',
+};
+
+/** one line per branch: the way of playing it opens up */
+export const BRANCH_HINT: Record<Branch, string> = {
+  core: 'Every path starts here.',
+  light: 'Lanternkeeper: stay down longer, go deeper on a weaker drill.',
+  drill: 'Driller: raw power. Breaks seals, but every point costs more.',
+  hull: 'Rig: speed, heat and shard flight. Keeps chains alive.',
+  shatter: 'Shardstorm: shards break tiles for you. Blow everything up.',
+  fortune: 'Prospector: earn more from every tile; gems and cores buy capstones.',
+  arcana: 'Trickster: more boons, better boons, more choices.',
+  world: 'Surveyor: make the ground itself richer. Affects newly explored ground.',
 };
 
 export const UPGRADES: UpgradeNode[] = [
   n({ id: 'root', branch: 'core', name: 'The Wick', desc: 'Your lantern-pod. Every path starts here.', icon: 'lantern', max: 1, pos: [0, 0], requires: [], base: { gold: 0 }, apply: () => {} }),
   // repeatable late-game refinements (gold sinks)
-  n({ id: 'refine_bit', branch: 'core', name: 'Refine the Bit', desc: '+4% drill power. Repeatable.', icon: 'drill', max: 999, infinite: true, pos: [1, 0], at: [-60, 1.45], requires: ['root'], base: { gold: 25000 }, growth: 1.22, apply: (s, l) => { s.drillPower *= 1 + 0.04 * l; } }),
-  n({ id: 'refine_wick', branch: 'core', name: 'Refine the Wick', desc: '+3% lantern fuel. Repeatable.', icon: 'lantern', max: 999, infinite: true, pos: [1, 0], at: [60, 1.45], requires: ['root'], base: { gold: 25000 }, growth: 1.22, apply: (s, l) => { s.maxLight *= 1 + 0.03 * l; } }),
-  n({ id: 'refine_purse', branch: 'core', name: 'Refine the Purse', desc: '+4% gold. Repeatable.', icon: 'coin', max: 999, infinite: true, pos: [1, 0], at: [180, 1.45], requires: ['root'], base: { gold: 25000 }, growth: 1.22, apply: (s, l) => { s.goldMul *= 1 + 0.04 * l; } }),
-  n({ id: 'refine_chain', branch: 'core', name: 'Refine the Pot', desc: 'Chain pots grow 4% faster. Repeatable.', icon: 'chain', max: 999, infinite: true, pos: [1, 0], at: [120, 1.45], requires: ['root'], base: { gold: 30000 }, growth: 1.22, apply: (s, l) => { s.chainPot *= 1 + 0.04 * l; } }),
-  n({ id: 'refine_luck', branch: 'core', name: 'Refine the Eye', desc: '+1% chance ore drops double. Repeatable.', icon: 'star', max: 999, infinite: true, pos: [1, 0], at: [240, 1.45], requires: ['root'], base: { gold: 30000 }, growth: 1.22, apply: (s, l) => { s.doubleOre += 0.01 * l; } }),
+  n({ id: 'refine_bit', branch: 'core', name: 'Refine the Bit', desc: '+4% drill power and +3% shard damage. Repeatable.', icon: 'drill', max: 999, infinite: true, pos: [1, 0], at: [between(0), 1.45], requires: ['root'], base: { gold: 400000 }, growth: 1.35, apply: (s, l) => { s.drillPower *= 1 + 0.04 * l; s.shardDamage *= 1 + 0.03 * l; } }),
+  n({ id: 'refine_wick', branch: 'core', name: 'Refine the Wick', desc: '+3% lantern fuel. Repeatable.', icon: 'lantern', max: 999, infinite: true, pos: [1, 0], at: [between(6), 1.45], requires: ['root'], base: { gold: 25000 }, growth: 1.22, apply: (s, l) => { s.maxLight *= 1 + 0.03 * l; } }),
+  n({ id: 'refine_purse', branch: 'core', name: 'Refine the Purse', desc: '+4% gold. Repeatable.', icon: 'coin', max: 999, infinite: true, pos: [1, 0], at: [between(3), 1.45], requires: ['root'], base: { gold: 25000 }, growth: 1.22, apply: (s, l) => { s.goldMul *= 1 + 0.04 * l; } }),
+  n({ id: 'refine_chain', branch: 'core', name: 'Refine the Pot', desc: 'Chain pots grow 4% faster. Repeatable.', icon: 'chain', max: 999, infinite: true, pos: [1, 0], at: [between(2), 1.45], requires: ['root'], base: { gold: 30000 }, growth: 1.22, apply: (s, l) => { s.chainPot *= 1 + 0.04 * l; } }),
+  n({ id: 'refine_luck', branch: 'core', name: 'Refine the Eye', desc: '+1% chance ore drops double, and rarer boons a little more often. Repeatable.', icon: 'star', max: 999, infinite: true, pos: [1, 0], at: [between(4), 1.45], requires: ['root'], base: { gold: 30000 }, growth: 1.22, apply: (s, l) => { s.doubleOre += 0.01 * l; s.luck += 0.1 * l; } }),
 
   // ---------------------------------------------------------------- LIGHT
   n({ id: 'oil', branch: 'light', name: 'Wick Oil', desc: '+10 lantern fuel.', icon: 'lantern', max: 5, pos: [1, 0], requires: ['root'], base: { gold: 12 }, growth: 1.8, apply: (s, l) => { s.maxLight += 10 * l; } }),
@@ -80,19 +99,19 @@ export const UPGRADES: UpgradeNode[] = [
   n({ id: 'kindling', branch: 'light', name: 'Kindling', desc: 'Every ore you mine restores 0.08 fuel (less in the deep).', icon: 'plus', max: 3, pos: [4, 0], requires: ['reserve'], base: { gold: 900, gems: 4 }, apply: (s, l) => { s.kindling += 0.08 * l; } }),
   n({ id: 'secondwind', branch: 'light', name: 'Second Wind', desc: 'Once per dig, relight with 25 fuel when it runs out.', icon: 'heart', max: 1, pos: [4, 2], requires: ['recycler'], base: { gold: 1500, gems: 6 }, apply: (s, l) => { s.secondWind += l; } }),
   n({ id: 'steady2', branch: 'light', name: 'Patient Flame', desc: 'Fuel drains 4% slower.', icon: 'drain', max: 3, pos: [5, -1], requires: ['amberinf', 'kindling'], base: { gold: 4000, gems: 6 }, apply: (s, l) => { s.lightDrain *= Math.pow(0.96, l); } }),
-  n({ id: 'lastlight', branch: 'light', name: 'Last Light', desc: 'Below 25% fuel, drain is halved.', icon: 'lantern', max: 1, pos: [5, 1], requires: ['kindling', 'secondwind'], base: { gold: 9000, cores: 1 }, capstone: true, apply: (s, l) => { if (l) s.lastLight = true; } }),
+  n({ id: 'lastlight', branch: 'light', name: 'Last Light', desc: '+20% lantern fuel, and below 25% fuel the drain is halved.', icon: 'lantern', max: 1, pos: [5, 1], requires: ['kindling', 'secondwind'], base: { gold: 9000, cores: 1 }, capstone: true, apply: (s, l) => { if (l) { s.lastLight = true; s.maxLight *= 1.2; } } }),
 
   // ---------------------------------------------------------------- DRILL
-  n({ id: 'bit', branch: 'drill', name: 'Tempered Bit', desc: '+1 drill power.', icon: 'drill', max: 5, pos: [1, 0], requires: ['root'], base: { gold: 10 }, growth: 1.65, apply: (s, l) => { s.drillPower += l; } }),
+  n({ id: 'bit', branch: 'drill', name: 'Tempered Bit', desc: '+1 drill power.', icon: 'drill', max: 5, pos: [1, 0], requires: ['root'], base: { gold: 10 }, growth: 1.8, apply: (s, l) => { s.drillPower += l; } }),
   n({ id: 'gearing', branch: 'drill', name: 'Gearing', desc: '+12% drill speed.', icon: 'speed', max: 5, pos: [2, -1], requires: ['bit'], base: { gold: 25 }, apply: (s, l) => { s.drillRate *= 1 + 0.12 * l; } }),
   n({ id: 'pulverize', branch: 'drill', name: 'Pulverizer', desc: 'Plain rock takes 20% more damage.', icon: 'drill', max: 3, pos: [2, 1], requires: ['bit'], base: { gold: 60 }, apply: (s, l) => { s.rockMul += 0.2 * l; } }),
-  n({ id: 'diamond', branch: 'drill', name: 'Diamond Edge', desc: '+3 drill power.', icon: 'drill', max: 5, pos: [3, 0], requires: ['gearing', 'pulverize'], base: { gold: 300, gems: 1 }, growth: 1.85, apply: (s, l) => { s.drillPower += 3 * l; } }),
+  n({ id: 'diamond', branch: 'drill', name: 'Diamond Edge', desc: '+3 drill power.', icon: 'drill', max: 5, pos: [3, 0], requires: ['gearing', 'pulverize'], base: { gold: 300, gems: 1 }, growth: 2.0, apply: (s, l) => { s.drillPower += 3 * l; } }),
   n({ id: 'prospect', branch: 'drill', name: "Prospector's Eye", desc: 'Ore takes 25% more damage.', icon: 'eye', max: 3, pos: [3, -2], requires: ['gearing'], base: { gold: 140 }, apply: (s, l) => { s.oreMul += 0.25 * l; } }),
   n({ id: 'widebit', branch: 'drill', name: 'Wide Bit', desc: 'Drilling also hits the tiles beside your target (25%).', icon: 'drill', max: 3, pos: [3, 2], requires: ['pulverize'], base: { gold: 400, gems: 3 }, apply: (s, l) => { s.wideBit += 0.25 * l; } }),
   n({ id: 'echo', branch: 'drill', name: 'Echo Drill', desc: 'Every 5th hit strikes three times. Each level hits one sooner.', icon: 'speed', max: 2, pos: [4, -1], requires: ['diamond', 'prospect'], base: { gold: 1400, gems: 5 }, apply: (s, l) => { if (l) s.echoEvery = 6 - l; } }),
   n({ id: 'overclock', branch: 'drill', name: 'Overclock', desc: '+20% drill speed.', icon: 'speed', max: 3, pos: [4, 1], requires: ['diamond', 'widebit'], base: { gold: 2200, gems: 4 }, apply: (s, l) => { s.drillRate *= 1 + 0.2 * l; } }),
   n({ id: 'seismic', branch: 'drill', name: 'Seismic Landing', desc: 'Falling 4+ tiles cracks the rock below.', icon: 'bomb', max: 2, pos: [5, -2], requires: ['echo'], base: { gold: 3000 }, apply: (s, l) => { s.seismic += l; } }),
-  n({ id: 'starbit', branch: 'drill', name: 'Starmetal Bit', desc: '+8 drill power.', icon: 'drill', max: 5, pos: [5, 0], requires: ['echo', 'overclock'], base: { gold: 9000, gems: 8 }, growth: 1.9, apply: (s, l) => { s.drillPower += 8 * l; } }),
+  n({ id: 'starbit', branch: 'drill', name: 'Starmetal Bit', desc: '+8 drill power.', icon: 'drill', max: 5, pos: [5, 0], requires: ['echo', 'overclock'], base: { gold: 40000, gems: 8 }, growth: 2.6, apply: (s, l) => { s.drillPower += 8 * l; } }),
   n({ id: 'excavator', branch: 'drill', name: 'Excavator', desc: 'Your bit chews a full 3x3 block.', icon: 'drill', max: 1, pos: [5, 2], requires: ['overclock'], base: { gold: 6000, cores: 1 }, capstone: true, apply: (s, l) => { if (l) { s.excavator = true; s.wideBit = Math.max(s.wideBit, 1); } } }),
 
   // ---------------------------------------------------------------- HULL
@@ -130,7 +149,7 @@ export const UPGRADES: UpgradeNode[] = [
   n({ id: 'haggle', branch: 'fortune', name: 'Haggler', desc: 'Workshop prices drop 4%.', icon: 'coin', max: 3, pos: [4, -1], requires: ['gemsense', 'deeppockets'], base: { gold: 1500, gems: 3 }, apply: (s, l) => { s.costMul *= Math.pow(0.96, l); } }),
   n({ id: 'fossil', branch: 'fortune', name: 'Fossil Hunter', desc: 'Gem sources yield +1 gem.', icon: 'gem', max: 2, pos: [4, 1], requires: ['gemsense', 'survey'], base: { gold: 1800, gems: 5 }, apply: (s, l) => { s.fossilBonus += l; } }),
   n({ id: 'appraise2', branch: 'fortune', name: 'Master Appraiser', desc: '+15% gold.', icon: 'coin', max: 5, pos: [5, -1], requires: ['haggle'], base: { gold: 6000, gems: 4 }, apply: (s, l) => { s.goldMul += 0.15 * l; } }),
-  n({ id: 'midas', branch: 'fortune', name: 'Midas Lamp', desc: 'Copper and silver are worth triple.', icon: 'coin', max: 1, pos: [5, 1], requires: ['haggle', 'fossil'], base: { gold: 7000, cores: 1 }, capstone: true, apply: (s, l) => { if (l) s.midas = true; } }),
+  n({ id: 'midas', branch: 'fortune', name: 'Midas Lamp', desc: 'Copper, tin and silver are worth triple, and every chain pot pays gems too (1 per 400 gold of bonus, up to 25).', icon: 'coin', max: 1, pos: [5, 1], requires: ['haggle', 'fossil'], base: { gold: 7000, cores: 1 }, capstone: true, apply: (s, l) => { if (l) s.midas = true; } }),
 
   // ---------------------------------------------------------------- ARCANA
   n({ id: 'draw', branch: 'arcana', name: "Fortune's Draw", desc: '+1 free boon reroll every dig.', icon: 'dice', max: 2, pos: [1, 0], requires: ['root'], base: { gold: 20 }, apply: (s, l) => { s.rerolls += l; } }),
@@ -143,14 +162,25 @@ export const UPGRADES: UpgradeNode[] = [
   n({ id: 'luck', branch: 'arcana', name: 'Lucky Stars', desc: 'Rare and mythic boons appear more often.', icon: 'star', max: 3, pos: [4, 1], requires: ['reroll', 'headstart'], base: { gold: 1600, gems: 3 }, apply: (s, l) => { s.luck += l; } }),
   n({ id: 'banish', branch: 'arcana', name: 'Banish', desc: '+1 banish each run: remove a boon from the pool.', icon: 'skull', max: 2, pos: [5, -2], requires: ['drone'], base: { gold: 5000, gems: 4 }, apply: (s, l) => { s.banishes += l; } }),
   n({ id: 'insight', branch: 'arcana', name: 'Insight', desc: 'Choose from 4 boons instead of 3.', icon: 'eye', max: 1, pos: [5, 0], requires: ['drone', 'luck'], base: { gold: 8000, cores: 1 }, apply: (s, l) => { s.boonChoices += l; } }),
-  n({ id: 'astral', branch: 'arcana', name: 'Astral Lantern', desc: 'Levelling up restores 10 fuel.', icon: 'lantern', max: 1, pos: [5, 2], requires: ['luck'], base: { gold: 7000, cores: 1 }, capstone: true, apply: (s, l) => { s.astral += 10 * l; } }),
+  n({ id: 'astral', branch: 'arcana', name: 'Astral Lantern', desc: 'Every level-up hand shows one more boon, you get a free reroll each dig, and levelling up restores 10 fuel.', icon: 'lantern', max: 1, pos: [5, 2], requires: ['luck'], base: { gold: 7000, cores: 1 }, capstone: true, apply: (s, l) => { if (l) { s.astral += 10; s.boonChoices += 1; s.rerolls += 1; } } }),
+
+  // ---------------------------------------------------------------- WORLD
+  // these reshape what newly generated ground holds; explored ground never changes
+  n({ id: 'shardveins', branch: 'world', name: 'Shard Veins', desc: '+15% shard sources (crystal, ember and cinnabar veins). Affects newly explored ground.', icon: 'shard', max: 5, pos: [1, 0], requires: ['root'], base: { gold: 14 }, apply: (s, l) => { s.prospect.shards += 0.15 * l; } }),
+  n({ id: 'geodesense', branch: 'world', name: 'Geode Sense', desc: '+20% geode vaults. Affects newly explored ground.', icon: 'gem', max: 4, pos: [2, -1], requires: ['shardveins'], base: { gold: 60 }, apply: (s, l) => { s.prospect.geodes += 0.2 * l; } }),
+  n({ id: 'caverns', branch: 'world', name: 'Open Caverns', desc: '+12% caves: less dead rock to grind through. Affects newly explored ground.', icon: 'radius', max: 3, pos: [2, 1], requires: ['shardveins'], base: { gold: 70 }, apply: (s, l) => { s.prospect.caves += 0.12 * l; } }),
+  n({ id: 'flora', branch: 'world', name: 'Fuel Flora', desc: '+25% lamp moss and amber. Affects newly explored ground.', icon: 'plus', max: 3, pos: [3, -2], requires: ['geodesense'], base: { gold: 220 }, apply: (s, l) => { s.prospect.flora += 0.25 * l; } }),
+  n({ id: 'richveins', branch: 'world', name: 'Rich Veins', desc: '+12% ore veins, +18% gem ore. Affects newly explored ground.', icon: 'coin', max: 5, pos: [3, 0], requires: ['geodesense', 'caverns'], base: { gold: 300, gems: 1 }, apply: (s, l) => { s.prospect.ores += 0.12 * l; } }),
+  n({ id: 'relicsense', branch: 'world', name: 'Relic Sense', desc: 'Relics lie nearer the shaft, and the relic pointer reaches farther. Finished layers hide more caches. Affects newly explored ground.', icon: 'eye', max: 3, pos: [3, 2], requires: ['caverns'], base: { gold: 400, gems: 2 }, apply: (s, l) => { s.prospect.relicSense += l; s.surveyRange += 30 * l; } }),
+  n({ id: 'surveyor', branch: 'world', name: 'Surveyor', desc: 'Shard sources, geodes and relics glow brighter, and the relic pointer shows from the first level.', icon: 'radius', max: 2, pos: [4, 1], requires: ['relicsense', 'richveins'], base: { gold: 1800, gems: 4 }, apply: (s, l) => { s.survey += l; s.surveyRange += 20 * l; } }),
+  n({ id: 'luckyground', branch: 'world', name: 'Lucky Ground', desc: '+5% chance a new stretch of ground is rich: twice the shard sources, geodes and ore. Affects newly explored ground.', icon: 'star', max: 3, pos: [5, 0], requires: ['surveyor', 'richveins'], base: { gold: 6000, cores: 1 }, capstone: true, apply: (s, l) => { s.prospect.rich += 0.05 * l; } }),
 ];
 
 export const UPGRADE_BY_ID: Record<string, UpgradeNode> = Object.fromEntries(UPGRADES.map((u) => [u.id, u]));
 
-const TIER_MUL = [1, 1, 1, 1.35, 3, 7];
+const TIER_MUL = [1, 1, 1, 1.4, 5, 16];
 /** global price scale: peaceful digs last longer and mine more than the old fights allowed */
-export const ECON = 3.5;
+export const ECON = 6;
 
 export function costOf(node: UpgradeNode, level: number, costMul = 1): Cost {
   const f = Math.pow(node.growth, level) * (node.infinite ? 1 : TIER_MUL[Math.min(5, node.pos[0])]);

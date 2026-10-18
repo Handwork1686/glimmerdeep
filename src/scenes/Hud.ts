@@ -386,7 +386,7 @@ export class HudScene extends Phaser.Scene {
     Audio.setIntensity(Math.min(1, sim.chain / 25));
 
     // relic pointer
-    const rel = sim.stats.survey >= 2 ? sim.nearestRelic() : null;
+    const rel = sim.stats.survey >= 2 || sim.stats.surveyRange > 0 ? sim.nearestRelic(80 + sim.stats.surveyRange) : null;
     this.relicArrow.setVisible(!!rel);
     this.relicDist.setVisible(!!rel);
     const cam = this.run.cameras.main;
@@ -418,6 +418,7 @@ export class HudScene extends Phaser.Scene {
       if (far) this.tip('farOut');
     }
     if (Save.data.sealsBroken.some((dep) => sim.depth() >= dep && sim.depth() < dep + 8)) this.tip('sealOpen');
+    if (sim.world.rich(Math.floor(sim.player.x / 16), Math.floor(sim.player.y / 16))) this.tip('rich');
 
     // one-time contextual tips
     if (sim.time > 0.6) this.tip('move');

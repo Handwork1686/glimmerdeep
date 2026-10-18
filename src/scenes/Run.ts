@@ -842,6 +842,15 @@ export class RunScene extends Phaser.Scene {
       }
       this.backBiome = biome.id;
     }
+    // rich ground glows warm, and glitters
+    const rich = this.sim.world.rich(Math.floor(this.sim.player.x / TILE), Math.floor(this.sim.player.y / TILE));
+    const tint = rich ? 0xffe2a0 : 0xffffff;
+    this.back.setTint(tint);
+    this.backNext.setTint(tint);
+    if (rich && Math.random() < 0.25) {
+      this.sparks.setParticleTint(0xffd877);
+      this.sparks.emitParticleAt(cam.scrollX + Math.random() * VIEW_W, cam.scrollY + Math.random() * VIEW_H, 1);
+    }
     const groundY = SKY_ROWS * TILE - cam.scrollY;
     this.back.tilePositionX = cam.scrollX;
     this.backNext.tilePositionX = cam.scrollX;

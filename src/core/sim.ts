@@ -205,7 +205,7 @@ const CORNER_ASSIST_AIR = [-1, -2, -3, -4, -5, -6, 1, 2, 3, 4, 5, 6];
 /** chain pot multiplier for a chain of n links: grows with the square root, then (past 1500 links) only slowly */
 export const POT_SOFTCAP = 1500;
 export function potMultiplier(n: number, growth: number): number {
-  const k = n <= POT_SOFTCAP ? Math.sqrt(n) : Math.sqrt(POT_SOFTCAP) * (1 + Math.log(n / POT_SOFTCAP) / 2);
+  const k = n <= POT_SOFTCAP ? Math.sqrt(n) : Math.sqrt(POT_SOFTCAP) + 4 * Math.log(n / POT_SOFTCAP);
   return 1 + growth * k;
 }
 
@@ -226,6 +226,8 @@ export function chainRefuel(chainFuel: number, chain: number, depth: number): nu
 }
 /** drilling with nothing breaking for this long, the lantern stops waiting */
 export const STALL_GRACE = 2.5;
+/** the most all drain reductions together can do */
+export const DRAIN_FLOOR = 0.4;
 export const STALL_MAX = 1.5;
 
 export class Sim {
@@ -411,7 +413,8 @@ export class Sim {
 
   /** fuel burned per second right now (depth, pressure, stall and Last Light included) */
   drainRate(): number {
-    let drain = this.stats.lightDrain * this.gloom.drainMul * drainCurve(this.depth()) * this.stallMul;
+    // drain reductions stack, but never below DRAIN_FLOOR: the deep always bites
+    let drain = Math.max(DRAIN_FLOOR, this.stats.lightDrain) * this.gloom.drainMul * drainCurve(this.depth()) * this.stallMul;
     if (this.stats.lastLight && this.lightFrac() < 0.25) drain *= 0.5;
     return drain;
   }
@@ -585,6 +588,8 @@ export class Sim {
       const mult = potMultiplier(this.chain, this.stats.chainPot);
       const bonus = this.potGold * (mult - 1);
       this.gold += bonus;
+      // Midas Lamp: a big pot also pays out in gems
+      if (this.stats.midas) this.gems += Math.min(25, Math.floor(bonus / 400));
       this.bestPot = Math.max(this.bestPot, this.potGold + bonus);
       this.emit({ t: 'chainEnd', count: this.chain, pot: this.potGold, mult, bonus });
     }
@@ -737,8 +742,9 @@ export class Sim {
   private cataclysmVolley() {
     const p = this.player;
     this.emit({ t: 'cataclysm', x: p.x, y: p.y });
-    this.spawnShards(p.x, p.y, 'cataclysm', 10, { power: BASE_SHARD_DAMAGE * 1.4 });
-    this.spawnShards(p.x, p.y, 'ember', 4, { power: 20 });
+    // the chain feeds it, so it thins out like any cascade (otherwise it would feed itself forever)
+    this.spawnShards(p.x, p.y, 'cataclysm', 10, { power: BASE_SHARD_DAMAGE * 1.4, gen: 1 });
+    this.spawnShards(p.x, p.y, 'ember', 4, { power: 20, gen: 1 });
   }
 
   /** the Shard Bomb: a burst of glass shards that carries every shard upgrade */

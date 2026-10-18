@@ -18,7 +18,7 @@ const b = (o: BoonDef) => o;
 
 export const BOONS: BoonDef[] = [
   // common
-  b({ id: 'overcharge', name: 'Overcharge', desc: '+20% drill power.', icon: 'drill', rarity: 'common', max: 5, apply: (s, k) => { s.drillPower *= 1 + 0.2 * k; } }),
+  b({ id: 'overcharge', name: 'Overcharge', desc: '+20% drill power.', icon: 'drill', rarity: 'common', max: 3, apply: (s, k) => { s.drillPower *= 1 + 0.2 * k; } }),
   b({ id: 'quickhands', name: 'Quick Hands', desc: '+15% drill speed.', icon: 'speed', rarity: 'common', max: 5, apply: (s, k) => { s.drillRate *= 1 + 0.15 * k; } }),
   b({ id: 'glasslens', name: 'Glass Lens', desc: '+15% light radius.', icon: 'radius', rarity: 'common', max: 3, apply: (s, k) => { s.lightRadius += 0.15 * k; } }),
   b({ id: 'oilflask', name: 'Oil Flask', desc: '+15 max fuel and refill 15.', icon: 'lantern', rarity: 'common', max: 3, onPick: 'refill', apply: (s, k) => { s.maxLight += 15 * k; } }),
@@ -30,6 +30,7 @@ export const BOONS: BoonDef[] = [
   b({ id: 'gilded', name: 'Gilded', desc: '+15% gold this run.', icon: 'coin', rarity: 'common', max: 5, apply: (s, k) => { s.goldMul += 0.15 * k; } }),
   b({ id: 'steady', name: 'Steady Wick', desc: 'Fuel drains 10% slower.', icon: 'drain', rarity: 'common', max: 3, apply: (s, k) => { s.lightDrain *= Math.pow(0.9, k); } }),
   b({ id: 'shrapnel', name: 'Shrapnel', desc: 'Shard bursts throw 20% more shards.', icon: 'bomb', rarity: 'common', max: 3, apply: (s, k) => { s.burstBonus += 0.2 * k; } }),
+  b({ id: 'dowsing', name: 'Dowsing Rod', desc: 'This dig, newly explored ground holds +40% shard sources and +30% geodes.', icon: 'radius', rarity: 'common', max: 2, apply: (s, k) => { s.prospect.shards += 0.4 * k; s.prospect.geodes += 0.3 * k; } }),
   b({ id: 'longfuse', name: 'Long Fuse', desc: 'Chains last 0.25 s longer.', icon: 'clock', rarity: 'common', max: 3, apply: (s, k) => { s.chainTime += 0.25 * k; } }),
   b({ id: 'kindling', name: 'Kindling', desc: 'Chain links refuel 25% more.', icon: 'chain', rarity: 'common', max: 3, apply: (s, k) => { s.chainFuel *= 1 + 0.25 * k; } }),
   // rare
