@@ -1,0 +1,64 @@
+/**
+ * Player-facing text. Keeping copy in one table makes it reviewable and ready
+ * for localisation (swap this module per language).
+ * `{key}` placeholders are filled from the current bindings by `fmtKeys`.
+ */
+export const S = {
+  tips: {
+    move: '{left}/{right} to move. Hold {down} to drill down.',
+    thrust: 'Hold {up} to thrust upward and drill the ceiling.',
+    ore: 'Ore is yours to keep. Everything banks when your lantern runs dry.',
+    crystal: 'Crystals burst into shards, and shards break more crystals. Chain them!',
+    chain: 'Every ore, crystal and shard break adds to your chain. When it ends, the pot pays out multiplied.',
+    lowlight: 'Your lantern is running low. Long chains, lamp moss and amber refuel it.',
+    flare: 'Press {flare} to flare: it cracks nearby rock and sets crystals off.',
+    seal: 'A Strata Seal. Your drill needs more power: upgrade it in the Workshop.',
+    geode: 'A geode! Crack the shell and the crystals inside go off all at once.',
+    relic: 'A relic: a keepsake from the deep. Its gift stays with you forever.',
+    boulder: 'Loose boulders fall when you dig out what holds them up.',
+    levelup: 'Level up! Pick one boon. It lasts until this dig ends.',
+    workshop: 'Spend what you found in the Workshop, then dig again.',
+    lift: 'New lift stop unlocked. Choose where to start from the Lift option.',
+  },
+  cards: {
+    secondWind: 'SECOND WIND',
+    secondWindSub: 'The flame catches again',
+    sealBroken: 'SEAL BROKEN',
+    newOre: 'NEW ORE',
+    relic: 'RELIC FOUND',
+    heart: "THE WORLD'S HEART",
+    heartSub: 'Its light floods up the shaft...',
+  },
+  streaks: [
+    [10, 'SPARK'],
+    [25, 'CHAIN'],
+    [50, 'CASCADE'],
+    [100, 'AVALANCHE'],
+    [250, 'LANDSLIDE'],
+    [500, 'QUAKE'],
+    [1000, 'WORLDBREAKER'],
+  ] as [number, string][],
+  results: {
+    dark: 'THE LANTERN DIMS',
+    darkSub: 'The lift hauls you up, pockets full.',
+    quit: 'BACK TO THE SURFACE',
+    heart: "THE WORLD'S HEART",
+    heartSub: 'Its light rides the lift up with you.',
+    banked: 'Everything you found is safely banked.',
+    nextSeal: 'Next: {name} at {depth} m needs {power} drill power.',
+    nextHeart: "Next: the World's Heart waits at 1500 m.",
+    nextEndless: 'Next: how deep does the world go?',
+    nextDepth: 'Next: beat your record of {depth} m.',
+  },
+  camp: {
+    hintMenu: 'Spend what you found, then dig again.',
+    hintWeb: '{confirm} buy (hold to repeat)    {back} back    arrows move',
+    unlockFirst: 'Unlock a connected node first.',
+    mastered: 'MASTERED',
+  },
+};
+
+/** Replace {action} placeholders with the current control labels. */
+export function fmtKeys(s: string, label: (a: string) => string, vars: Record<string, string | number> = {}): string {
+  return s.replace(/\{(\w+)\}/g, (_, k: string) => (k in vars ? String(vars[k]) : label(k)));
+}

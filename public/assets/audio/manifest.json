@@ -1,0 +1,113 @@
+{
+ "sfx": {
+  "ui_move": 3,
+  "ui_select": 1,
+  "ui_back": 1,
+  "ui_deny": 1,
+  "tick": 3,
+  "drill_rock": 4,
+  "drill_ore": 3,
+  "break_rock": 4,
+  "break_ore": 3,
+  "shatter": 3,
+  "crystal": 3,
+  "pickup": 1,
+  "light_pickup": 1,
+  "gem_pickup": 1,
+  "core_pickup": 1,
+  "explode": 3,
+  "flare": 2,
+  "throw": 2,
+  "thrust_start": 2,
+  "land": 2,
+  "clank": 2,
+  "levelup": 1,
+  "boon_pick": 1,
+  "reroll": 1,
+  "banish": 1,
+  "chain_big": 2,
+  "second_wind": 1,
+  "achievement": 1,
+  "buy": 2,
+  "descend": 1,
+  "biome": 1,
+  "run_end": 1,
+  "heartbeat": 1,
+  "pylon": 1,
+  "tip": 1,
+  "chain_milestone": 1,
+  "death_gutter": 1,
+  "cashout": 2,
+  "seal_break": 1,
+  "geode": 2,
+  "relic": 1,
+  "discover": 1,
+  "heart_break": 1,
+  "drill_loop": 1
+ },
+ "music": {
+  "title": {
+   "loopStart": 0
+  },
+  "ending": {
+   "loopStart": 0
+  },
+  "camp": {
+   "loopStart": 0
+  },
+  "rootsoil": {
+   "loopStart": 0,
+   "stems": [
+    "hi"
+   ]
+  },
+  "amberstone": {
+   "loopStart": 0,
+   "stems": [
+    "hi"
+   ]
+  },
+  "grotto": {
+   "loopStart": 0,
+   "stems": [
+    "hi"
+   ]
+  },
+  "emberdeep": {
+   "loopStart": 0,
+   "stems": [
+    "hi"
+   ]
+  },
+  "hollow": {
+   "loopStart": 0,
+   "stems": [
+    "hi"
+   ]
+  },
+  "mantle": {
+   "loopStart": 0,
+   "stems": [
+    "hi"
+   ]
+  },
+  "heart": {
+   "loopStart": 0,
+   "stems": [
+    "hi"
+   ]
+  },
+  "results": {
+   "loopStart": 0
+  }
+ },
+ "ambience": {
+  "rootsoil": 1,
+  "amberstone": 1,
+  "grotto": 1,
+  "emberdeep": 1,
+  "hollow": 1,
+  "mantle": 1,
+  "heart": 1
+ }
+}

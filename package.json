@@ -1,0 +1,83 @@
+{
+  "name": "glimmerdeep",
+  "productName": "Glimmerdeep",
+  "version": "1.0.0",
+  "description": "An incremental mining roguelite about carrying light into the deep.",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "art": "python3 tools/art/build.py",
+    "audio": "python3 tools/audio/build.py",
+    "sim": "vite-node tools/sim/run.ts",
+    "electron": "npm run build && electron .",
+    "electron:dev": "GLIMMER_DEV=1 electron .",
+    "dist": "npm run build && electron-builder --linux --win --mac --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "qa": "node tools/qa/shot.mjs tools/qa/out basic",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "build:demo": "tsc --noEmit && VITE_DEMO=1 vite build",
+    "dist:demo": "npm run build:demo && electron-builder --linux --win --mac --publish never -c.productName=\"Glimmerdeep Demo\" -c.appId=com.hearthmoorgames.glimmerdeep.demo -c.directories.output=release-demo"
+  },
+  "dependencies": {
+    "phaser": "3.90.0",
+    "steamworks.js": "0.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "electron": "38.2.2",
+    "electron-builder": "26.0.12",
+    "playwright": "1.56.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.4",
+    "vite-node": "6.0.0",
+    "vitest": "5.0.5"
+  },
+  "author": {
+    "name": "Hearthmoor Games"
+  },
+  "build": {
+    "appId": "com.hearthmoorgames.glimmerdeep",
+    "productName": "Glimmerdeep",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/steamworks.js/**/*"
+    ],
+    "extraFiles": [],
+    "linux": {
+      "target": [
+        "dir",
+        "AppImage"
+      ],
+      "category": "Game",
+      "icon": "build/icon.png"
+    },
+    "win": {
+      "target": [
+        "dir"
+      ],
+      "icon": "build/icon.png"
+    },
+    "mac": {
+      "target": [
+        "dir"
+      ],
+      "category": "public.app-category.games",
+      "icon": "build/icon.png"
+    }
+  }
+}

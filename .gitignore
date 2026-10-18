@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-electron/
+release/
+*.log
+.cache/
+tools/**/__pycache__/
+tools/art/out/
+tools/qa/*/
+!tools/qa/*.mjs
+
+release-demo/
