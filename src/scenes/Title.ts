@@ -67,7 +67,7 @@ export class TitleScene extends Phaser.Scene {
   private start() {
     Audio.play('descend');
     // first ever descent goes straight down; afterwards the Workshop
-    fadeTo(this, Save.data.stats.runs === 0 ? 'Run' : 'Camp', { stop: 'surface' }, 500);
+    fadeTo(this, Save.data.stats.runs === 0 ? 'Run' : 'Camp', {}, 500);
   }
 
   private newGame() {
@@ -77,7 +77,7 @@ export class TitleScene extends Phaser.Scene {
     }
     Save.reset();
     this.confirmNew = false;
-    fadeTo(this, 'Run', { stop: 'surface' }, 500);
+    fadeTo(this, 'Run', {}, 500);
   }
 
   private openSettings() {

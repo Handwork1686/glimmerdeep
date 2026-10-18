@@ -7,12 +7,13 @@ import { Bot } from '../../src/core/bot';
 import { computeStats } from '../../src/core/progression';
 import { Sim } from '../../src/core/sim';
 import { costOf, isAvailable, UPGRADES } from '../../src/data/upgrades';
-import { availableStops, bankRun } from '../../src/systems/bank';
+import { bankRun } from '../../src/systems/bank';
 import { newSave } from '../../src/systems/save';
 
 const RUNS = Number(process.argv[2] ?? 120);
 const CAMP_OVERHEAD = 25; // seconds spent in the workshop per run
 const save = newSave();
+const stallGaps: number[] = [];
 let clock = 0;
 const milestones: Record<string, number> = {};
 const mark = (k: string) => {
@@ -45,22 +46,26 @@ function shop() {
 }
 
 for (let r = 0; r < RUNS; r++) {
-  // deepest available lift stop
-  const stops = availableStops(save);
-  const stop = stops[stops.length - 1];
-  const sim = new Sim({ seed: 1000 + r, upgrades: save.upgrades, relics: save.relics, startDepth: stop.depth, gloom: 0 });
+  // every dig starts at the surface; broken seals stay broken
+  const sim = new Sim({ seed: 1000 + r, upgrades: save.upgrades, relics: save.relics, sealsBroken: save.sealsBroken, gloom: 0 });
   const bot = new Bot();
   let steps = 0;
+  const breaks: number[] = [];
+  let frontierT = 0;
   while (!sim.over && steps < 60 * 900) {
     if (sim.pendingLevels > 0) {
       const h = sim.openChoice();
       if (h && h.length) sim.choose(h[0].id);
     }
     sim.step(bot.think(sim));
-    sim.drainEvents();
+    for (const e of sim.drainEvents()) if (e.t === 'break') breaks.push(sim.time);
+    // "power frontier": the last moment the bot was still breaking >= 6 tiles per 10 s
+    while (breaks.length && breaks[0] < sim.time - 10) breaks.shift();
+    if (breaks.length >= 6) frontierT = sim.time;
     steps++;
   }
   const sum = sim.summary();
+  if (sum.reason === 'dark') stallGaps.push(sum.time - frontierT);
   if (r < 4 || sum.time > 300) console.log("   light:", JSON.stringify(Object.fromEntries(Object.entries(sim.lightLog).map(([k, v]) => [k, Math.round(v)]))), "max", Math.round(sim.stats.maxLight), "drain", sim.stats.lightDrain.toFixed(2));
   clock += sum.time + CAMP_OVERHEAD;
   bankRun(save, sum);
@@ -77,7 +82,7 @@ for (let r = 0; r < RUNS; r++) {
   const st = computeStats(save.upgrades);
   if (r < 12 || r % 5 === 0 || sum.reachedHeart) {
     console.log(
-      `run ${String(r + 1).padStart(3)} t=${(clock / 60).toFixed(1).padStart(5)}m from ${String(stop.depth).padStart(4)}m -> ${String(sum.maxDepth).padStart(4)}m ` +
+      `run ${String(r + 1).padStart(3)} t=${(clock / 60).toFixed(1).padStart(5)}m -> ${String(sum.maxDepth).padStart(4)}m ` +
         `${sum.time.toFixed(0).padStart(3)}s gold +${String(sum.gold).padStart(6)} gems +${sum.gems} cores +${sum.cores} chain ${sum.bestChain} ` +
         `bought ${save.stats.nodesBought - before} | power ${st.drillPower.toFixed(0)} rate ${st.drillRate.toFixed(1)} light ${st.maxLight.toFixed(0)} pot ${sum.bestPot} relics ${save.relics.length}${sum.reachedHeart ? ' HEART' : ''}`,
     );
@@ -86,4 +91,6 @@ for (let r = 0; r < RUNS; r++) {
 }
 console.log('\nmilestones (minutes):');
 for (const [k, v] of Object.entries(milestones)) console.log(`  ${k.padEnd(22)} ${(v / 60).toFixed(1)}`);
+const sg = [...stallGaps].sort((a, b) => a - b);
+console.log(`stall gap (frontier -> lantern out): median ${sg[sg.length >> 1]?.toFixed(1)}s, p90 ${sg[Math.floor(sg.length * 0.9)]?.toFixed(1)}s over ${sg.length} dark endings`);
 console.log(`nodes bought ${save.stats.nodesBought}, total gold ${save.stats.totalGold}`);

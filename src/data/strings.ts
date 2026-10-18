@@ -18,7 +18,8 @@ export const S = {
     boulder: 'Loose boulders fall when you dig out what holds them up.',
     levelup: 'Level up! Pick one boon. It lasts until this dig ends.',
     workshop: 'Spend what you found in the Workshop, then dig again.',
-    lift: 'New lift stop unlocked. Choose where to start from the Lift option.',
+    sealOpen: 'Broken seals stay broken. Every dig starts at the surface, and your drill tears through what you have already conquered.',
+    farOut: 'The deep goes on sideways forever. The Heart lies under the shaft: the marker points home.',
   },
   cards: {
     secondWind: 'SECOND WIND',
@@ -40,10 +41,10 @@ export const S = {
   ] as [number, string][],
   results: {
     dark: 'THE LANTERN DIMS',
-    darkSub: 'The lift hauls you up, pockets full.',
+    darkSub: "Ottilie's winch reels you home, pockets full.",
     quit: 'BACK TO THE SURFACE',
     heart: "THE WORLD'S HEART",
-    heartSub: 'Its light rides the lift up with you.',
+    heartSub: 'Its light carries you all the way home.',
     banked: 'Everything you found is safely banked.',
     nextSeal: 'Next: {name} at {depth} m needs {power} drill power.',
     nextHeart: "Next: the World's Heart waits at 1500 m.",

@@ -7,6 +7,10 @@ import { TILE } from '../config';
 import { TILES } from '../data/tiles';
 import { Rng } from './rng';
 import { NO_INPUT, Sim, SimInput } from './sim';
+import { tileKey } from './world';
+
+/** how far either side of the shaft the bot will roam */
+const ROAM = 40;
 
 export class Bot {
   private goal: { x: number; y: number } | null = null;
@@ -42,8 +46,10 @@ export class Bot {
         for (let dx = -8; dx <= 8; dx++) {
           const t = TILES[sim.tileAt(px + dx, py + dy)];
           if (!(t.ore || t.light || t.shards || t.name === 'relic' || t.name === 'geode')) continue;
-          if (this.blacklist.has((py + dy) * 64 + px + dx)) continue;
+          if (this.blacklist.has(tileKey(px + dx, py + dy))) continue;
           let d = Math.abs(dx) + Math.abs(dy) * 0.7;
+          // the world is open, but the Heart is under the shaft: stay within reach of it
+          if (Math.abs(px + dx) > ROAM) d += 6;
           if (t.name === 'worldheart') d -= 100;
           if (d < best) {
             best = d;
@@ -64,10 +70,12 @@ export class Bot {
     const below = TILES[sim.tileAt(px, py + 1)];
     const sealed = below.name === 'seal' && sim.stats.drillPower < sim.sealNeed(py + 1);
     if (below.unbreakable || sealed) {
-      // find a way around (lift landings), or mine sideways under a seal we cannot break yet
+      // mine sideways under a seal we cannot break yet
       gx = px + this.wander * 6;
       gy = py;
     }
+    // deep down, drift back toward the shaft and the Heart beneath it
+    if (sim.depth() > 1380 && !this.goal && !sim.reachedHeart && Math.abs(px - sim.heart.x) > 2) gx = sim.heart.x;
     const belowT = TILES[sim.tileAt(px, py + 1)];
     const diggingDown = p.drill === 'down' && belowT.solid && !belowT.unbreakable;
     if (!diggingDown) {
@@ -81,7 +89,7 @@ export class Bot {
     if (this.goal) {
       this.goalT += 1;
       if (this.goalT > 240) {
-        this.blacklist.add(this.goal.y * 64 + this.goal.x);
+        this.blacklist.add(tileKey(this.goal.x, this.goal.y));
         this.goal = null;
         this.goalT = 0;
       }
@@ -98,8 +106,8 @@ export class Bot {
       inp.up = true;
       this.stuck = 0;
     }
-    if (px <= 2) this.wander = 1;
-    if (px >= sim.W - 3) this.wander = -1;
+    if (px <= -ROAM) this.wander = 1;
+    if (px >= ROAM) this.wander = -1;
 
     // flare when it would start a chain: crystals or embers inside the flare radius
     let fuel = 0;

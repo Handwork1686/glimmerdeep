@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { DEMO, VIEW_H, VIEW_W } from '../config';
-import { BIOMES, HEART_DEPTH, LIFT_STOPS, SEALS } from '../data/biomes';
+import { BIOMES, HEART_DEPTH, SEALS } from '../data/biomes';
 import { RELIC_BY_ID } from '../data/relics';
 import { computeStats } from '../core/progression';
 import { S as STR } from '../data/strings';
@@ -86,7 +86,7 @@ export class ResultsScene extends Phaser.Scene {
     const notes: string[] = [];
     for (const id of r.relics) notes.push(`Relic: ${RELIC_BY_ID[id]?.name ?? id}`);
     if (this.bank.newPressure) notes.push(`Deep Pressure ${this.bank.newPressure} unlocked`);
-    for (const s of this.bank.unlockedStops) notes.push(`New lift stop: ${LIFT_STOPS.find((l) => l.id === s)?.name ?? s}`);
+    for (const dep of r.sealsBroken) notes.push(`${SEALS.find((s) => s.depth === dep)?.name ?? 'A seal'} stays broken`);
     // depth bar: the five biomes, this descent and the record
     const bx = 60;
     const bw = 360;

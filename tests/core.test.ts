@@ -1,16 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import { Rng } from '../src/core/rng';
-import { generateWorld, rowOfDepth } from '../src/core/worldgen';
+import { rowOfDepth } from '../src/core/worldgen';
+import { keyX, keyY } from '../src/core/world';
 import { Sim, NO_INPUT, potMultiplier } from '../src/core/sim';
 import { Bot } from '../src/core/bot';
 import { computeStats, rollBoons, xpForLevel } from '../src/core/progression';
 import { TILE_NAMES, T, TILES } from '../src/data/tiles';
-import { HEART_DEPTH, LIFT_STOPS, SEAL_ROWS, SEALS } from '../src/data/biomes';
-import { RELICS } from '../src/data/relics';
+import { SEALS } from '../src/data/biomes';
 import { UPGRADES, costOf, isAvailable, UPGRADE_BY_ID } from '../src/data/upgrades';
 import { BOONS } from '../src/data/boons';
-import { COLS, WORLD_ROWS } from '../src/config';
 
 describe('rng', () => {
   it('is deterministic per seed', () => {
@@ -38,56 +37,6 @@ describe('tiles', () => {
       expect(t.hp).toBeGreaterThanOrEqual(0);
       if (t.drop) expect(t.drop.gold).toBeGreaterThan(0);
     }
-  });
-});
-
-describe('worldgen', () => {
-  it('is deterministic', () => {
-    const a = generateWorld({ seed: 123 });
-    const b = generateWorld({ seed: 123 });
-    expect(Buffer.from(a.tiles).equals(Buffer.from(b.tiles))).toBe(true);
-  });
-  it('differs across seeds', () => {
-    const a = generateWorld({ seed: 1 });
-    const b = generateWorld({ seed: 2 });
-    expect(Buffer.from(a.tiles).equals(Buffer.from(b.tiles))).toBe(false);
-  });
-  it('has bedrock walls and full-width strata seals at every boundary', () => {
-    const w = generateWorld({ seed: 9 });
-    for (let y = 20; y < WORLD_ROWS; y += 37) {
-      expect(w.tiles[y * COLS]).toBe(T.bedrock);
-      expect(w.tiles[y * COLS + COLS - 1]).toBe(T.bedrock);
-    }
-    for (const sl of SEALS) {
-      for (let y = rowOfDepth(sl.depth); y < rowOfDepth(sl.depth) + SEAL_ROWS; y++) {
-        for (let x = 1; x < COLS - 1; x++) expect(w.tiles[y * COLS + x]).toBe(T.seal);
-      }
-    }
-  });
-  it('gives every lift stop a breakable way down', () => {
-    const w = generateWorld({ seed: 5 });
-    for (const s of LIFT_STOPS) {
-      if (s.depth === 0) continue;
-      const y = rowOfDepth(s.depth);
-      expect(w.tiles[y * COLS + 15]).toBe(T.air);
-      const plug = w.tiles[(y + 1) * COLS + 15];
-      expect(TILES[plug].unbreakable ?? false).toBe(false);
-    }
-  });
-  it("puts the World's Heart in its chamber, and buries every relic not yet found", () => {
-    const w = generateWorld({ seed: 3 });
-    expect(w.tiles[w.heart.y * COLS + w.heart.x]).toBe(T.worldheart);
-    expect(w.heart.y).toBeGreaterThan(rowOfDepth(HEART_DEPTH));
-    expect(w.relics).toHaveLength(RELICS.length);
-    for (const r of w.relics) expect(w.tiles[r.y * COLS + r.x]).toBe(T.relic);
-    const w2 = generateWorld({ seed: 3, foundRelics: ['oldpick', 'crown'] });
-    expect(w2.relics.map((r) => r.id)).not.toContain('oldpick');
-    expect(w2.relics).toHaveLength(RELICS.length - 2);
-  });
-  it('fills geode vaults with crystal around a core', () => {
-    let vaults = 0;
-    for (const seed of [1, 2, 3]) vaults += generateWorld({ seed }).geodes;
-    expect(vaults).toBeGreaterThan(10);
   });
 });
 
@@ -138,7 +87,7 @@ describe('progression', () => {
 
 describe('simulation', () => {
   it('light drains and the run ends in darkness when idle', () => {
-    const sim = new Sim({ seed: 1, upgrades: {}, startDepth: 0, gloom: 0 });
+    const sim = new Sim({ seed: 1, upgrades: {}, gloom: 0 });
     let steps = 0;
     while (!sim.over && steps < 60 * 200) {
       sim.step(NO_INPUT);
@@ -150,7 +99,7 @@ describe('simulation', () => {
   });
   it('a bot run produces sane, finite results', () => {
     for (const seed of [11, 12, 13]) {
-      const sim = new Sim({ seed, upgrades: { root: 1, bit: 2 }, startDepth: 0, gloom: 0 });
+      const sim = new Sim({ seed, upgrades: { root: 1, bit: 2 }, gloom: 0 });
       const bot = new Bot();
       let steps = 0;
       while (!sim.over && steps < 60 * 400) {
@@ -170,7 +119,7 @@ describe('simulation', () => {
     }
   });
   it('the player never ends up inside solid rock', () => {
-    const sim = new Sim({ seed: 77, upgrades: { root: 1, bit: 3, gearing: 2 }, startDepth: 0, gloom: 0 });
+    const sim = new Sim({ seed: 77, upgrades: { root: 1, bit: 3, gearing: 2 }, gloom: 0 });
     const bot = new Bot();
     for (let i = 0; i < 60 * 60 && !sim.over; i++) {
       if (sim.pendingLevels > 0) {
@@ -184,20 +133,21 @@ describe('simulation', () => {
     }
   });
   it('a seal only yields to a drill with enough power, then shatters across', () => {
-    const weak = new Sim({ seed: 4, upgrades: { root: 1 }, startDepth: 0, gloom: 0 });
+    const weak = new Sim({ seed: 4, upgrades: { root: 1 }, gloom: 0 });
     const row = rowOfDepth(SEALS[0].depth);
-    expect(weak.damageTile(15, row, 1e9, 'drill')).toBe(false);
-    expect(weak.damageTile(15, row, 1e9, 'blast')).toBe(false);
+    expect(weak.damageTile(0, row, 1e9, 'drill')).toBe(false);
+    expect(weak.damageTile(0, row, 1e9, 'blast')).toBe(false);
     expect(weak.drainEvents().some((e) => e.t === 'sealDeny')).toBe(true);
-    const strong = new Sim({ seed: 4, upgrades: { root: 1, bit: 5, diamond: 2 }, startDepth: 0, gloom: 0 });
+    const strong = new Sim({ seed: 4, upgrades: { root: 1, bit: 5, diamond: 2 }, gloom: 0 });
     expect(strong.stats.drillPower).toBeGreaterThanOrEqual(SEALS[0].power);
-    expect(strong.damageTile(15, row, 1e9, 'drill')).toBe(true);
+    expect(strong.damageTile(0, row, 1e9, 'drill')).toBe(true);
     for (let i = 0; i < 120; i++) strong.step(NO_INPUT);
-    for (let x = 1; x < COLS - 1; x++) expect(strong.tileAt(x, row)).toBe(T.air);
+    for (let x = -20; x <= 20; x++) expect(strong.tileAt(x, row)).toBe(T.air);
     expect(strong.summary().seals).toBe(1);
+    expect(strong.summary().sealsBroken).toEqual([SEALS[0].depth]);
   });
   it('a chain pays its pot out multiplied when it ends', () => {
-    const sim = new Sim({ seed: 8, upgrades: { root: 1 }, startDepth: 0, gloom: 0 });
+    const sim = new Sim({ seed: 8, upgrades: { root: 1 }, gloom: 0 });
     const y = 30;
     for (let x = 3; x < 13; x++) sim.setTile(x, y, T.gold);
     for (let x = 3; x < 13; x++) sim.damageTile(x, y, 1e9, 'shard');
@@ -215,10 +165,11 @@ describe('simulation', () => {
     expect(sim.gold - before).toBeGreaterThanOrEqual(end!.bonus - 1e-6);
   });
   it("finding a relic applies its perk at once, and breaking the Heart reaches the end", () => {
-    const sim = new Sim({ seed: 6, upgrades: { root: 1 }, startDepth: 0, gloom: 0 });
-    const [i, id] = [...sim.relicAt.entries()].find(([, r]) => r === 'oldpick')!;
+    const sim = new Sim({ seed: 6, upgrades: { root: 1 }, gloom: 0 });
+    const [k, id] = [...sim.relicAt.entries()].find(([, r]) => r === 'oldpick')!;
     const power = sim.stats.drillPower;
-    sim.damageTile(i % COLS, Math.floor(i / COLS), 1e9, 'drill');
+    expect(sim.tileAt(keyX(k), keyY(k))).toBe(T.relic);
+    sim.damageTile(keyX(k), keyY(k), 1e9, 'drill');
     expect(sim.stats.drillPower).toBe(power + 1);
     expect(sim.summary().relics).toEqual([id]);
     sim.damageTile(sim.heart.x, sim.heart.y, 1e9, 'drill');

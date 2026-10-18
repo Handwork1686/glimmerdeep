@@ -1,12 +1,11 @@
 import Phaser from 'phaser';
 import { VIEW_H, VIEW_W } from '../config';
-import { LIFT_STOPS, SEALS } from '../data/biomes';
+import { SEALS } from '../data/biomes';
 import { BRANCH_ANGLE, BRANCH_COLOR, BRANCH_NAME, costOf, isAvailable, UPGRADE_BY_ID, UPGRADES, UpgradeNode } from '../data/upgrades';
 import { computeStats, GLOOM_DESCRIPTIONS } from '../core/progression';
 import { RELICS } from '../data/relics';
 import { checkAll } from '../systems/achievements';
 import { Audio } from '../systems/audio';
-import { availableStops } from '../systems/bank';
 import { Controls } from '../systems/controls';
 import { Save } from '../systems/save';
 import { COLORS, fadeTo, fmt, Menu, panel, txt, wrap } from '../ui/widgets';
@@ -178,21 +177,12 @@ export class CampScene extends Phaser.Scene {
     this.coreT = txt(this, WEB_W + 128, 8, '', COLORS.teal);
     this.info = this.add.container(WEB_W + 8, 26);
 
-    const stops = () => availableStops(Save.data);
-    const stopName = () => LIFT_STOPS.find((s) => s.id === Save.data.stop)?.name ?? 'Hearthmoor';
-    const cycleStop = (d: number) => {
-      const list = stops();
-      const i = Math.max(0, list.findIndex((s) => s.id === Save.data.stop));
-      Save.data.stop = list[(i + d + list.length) % list.length].id;
-      Save.save();
-    };
     const cycleGloom = (d: number) => {
       Save.data.gloom = Phaser.Math.Clamp(Save.data.gloom + d, 0, Save.data.maxGloom);
       Save.save();
     };
     this.menu = new Menu(this, WEB_W + 18, 142, [
       { label: 'DESCEND', onSelect: () => this.descend() },
-      { label: () => `Lift: < ${stopName()} >`, onLeft: () => cycleStop(-1), onRight: () => cycleStop(1), onSelect: () => cycleStop(1), disabled: () => stops().length < 2 },
       { label: () => `Pressure: < ${Save.data.gloom} >`, onLeft: () => cycleGloom(-1), onRight: () => cycleGloom(1), onSelect: () => cycleGloom(1), disabled: () => Save.data.maxGloom === 0 },
       { label: 'Workshop', onSelect: () => this.enterWeb() },
       { label: 'Codex', onSelect: () => fadeTo(this, 'Codex', { from: 'Camp' }) },
@@ -270,7 +260,7 @@ export class CampScene extends Phaser.Scene {
   private descend() {
     Audio.play('descend');
     Save.save();
-    fadeTo(this, 'Run', { stop: Save.data.stop }, 400);
+    fadeTo(this, 'Run', {}, 400);
   }
 
   /** Haggler discount, recomputed only when upgrades change */

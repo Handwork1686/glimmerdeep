@@ -1,10 +1,11 @@
 import Phaser from 'phaser';
-import { COLS, DEMO, SKY_ROWS, STEP, TILE, VIEW_H, VIEW_W, WORLD_ROWS } from '../config';
-import { biomeAt, LIFT_STOPS } from '../data/biomes';
+import { DEMO, SKY_ROWS, STEP, TILE, VIEW_H, VIEW_W } from '../config';
+import { biomeAt } from '../data/biomes';
 import { ITEM_GLOW, T, TILES } from '../data/tiles';
 import { UPGRADES } from '../data/upgrades';
 import { Bot } from '../core/bot';
 import { Sim, SimEvent, SimInput } from '../core/sim';
+import { tileKey } from '../core/world';
 import { depthOfRow } from '../core/worldgen';
 import { Audio } from '../systems/audio';
 import { Controls } from '../systems/controls';
@@ -14,7 +15,6 @@ import { checkAll } from '../systems/achievements';
 import { fmt } from '../ui/widgets';
 
 export interface RunData {
-  stop?: string;
   attract?: boolean;
   seed?: number;
 }
@@ -23,6 +23,9 @@ type Spr = Phaser.GameObjects.Sprite;
 type Img = Phaser.GameObjects.Image;
 
 const DARK = 0x07060c;
+/** the tilemap is a window onto the open world that follows the camera */
+const WIN_W = 48;
+const WIN_H = 32;
 
 export class RunScene extends Phaser.Scene {
   sim!: Sim;
@@ -68,6 +71,11 @@ export class RunScene extends Phaser.Scene {
   private goldPopTimer = 0;
   private endTimer = -1;
   private camY = 0;
+  private camX = 0;
+  /** world tile at the window's top-left */
+  private winX = 0;
+  private winY = 0;
+  private mountains!: Phaser.GameObjects.TileSprite;
   private flicker = 1;
   /** flare / dynamite presses wait here until a fixed step consumes them */
   private flareQueued = false;
@@ -90,14 +98,14 @@ export class RunScene extends Phaser.Scene {
     const q = new URLSearchParams(window.location.search);
     this.bot = this.attract || q.has('autoplay') ? new Bot() : null;
     const save = Save.data;
-    const stop = LIFT_STOPS.find((s) => s.id === (data.stop ?? save.stop)) ?? LIFT_STOPS[0];
     const seed = data.seed ?? (q.has('seed') ? Number(q.get('seed')) : (Date.now() ^ (save.seedCounter * 2654435761)) >>> 0);
     if (!this.attract) save.seedCounter++;
     let upgrades = this.attract ? { root: 1, bit: 2, brittle: 2, oil: 2 } : save.upgrades;
-    let startDepth = this.attract ? 0 : stop.depth;
+    // every dig starts at the surface
+    let debugDepth: number | undefined;
     if (import.meta.env.DEV && q.has('depth')) {
-      // developer shortcut: ?depth=290&lvl=3 starts deep with every node at that level
-      startDepth = Number(q.get('depth'));
+      // developer shortcut (QA only): ?depth=290&lvl=3 starts deep with every node at that level
+      debugDepth = Number(q.get('depth'));
       const lvl = Number(q.get('lvl') ?? 3);
       upgrades = Object.fromEntries(UPGRADES.map((u) => [u.id, Math.min(u.max, lvl)]));
     }
@@ -105,7 +113,8 @@ export class RunScene extends Phaser.Scene {
       seed,
       upgrades,
       relics: this.attract ? [] : save.relics,
-      startDepth,
+      sealsBroken: this.attract ? [] : save.sealsBroken,
+      debugDepth,
       gloom: this.attract ? 0 : save.gloom,
       demo: DEMO,
     });
@@ -128,14 +137,16 @@ export class RunScene extends Phaser.Scene {
 
   create() {
     const sim = this.sim;
-    this.cameras.main.setBounds(0, 0, COLS * TILE, WORLD_ROWS * TILE);
+    // the world is open sideways: no camera bounds, the camera clamps itself at the sky
     this.cameras.main.setRoundPixels(true);
 
     // ---- sky & surface scenery (only visible near the top)
     const sky = this.add.image(0, 0, 'sky').setOrigin(0, 0).setScrollFactor(0, 0).setDepth(-10);
-    const mountains = this.add.image(0, SKY_ROWS * TILE - 150, 'mountains').setOrigin(0, 0).setScrollFactor(1, 0.5).setDepth(-9);
-    const village = this.add.image(0, SKY_ROWS * TILE - 118, 'village').setOrigin(0, 0).setDepth(-8);
-    this.skyLayers = [sky, mountains, village];
+    const mt = this.textures.get('mountains').getSourceImage();
+    this.mountains = this.add.tileSprite(0, SKY_ROWS * TILE - 150, VIEW_W, mt.height, 'mountains').setOrigin(0, 0).setScrollFactor(0, 0.5).setDepth(-9);
+    // Hearthmoor sits over the shaft (x = 0)
+    const village = this.add.image(-VIEW_W / 2, SKY_ROWS * TILE - 118, 'village').setOrigin(0, 0).setDepth(-8);
+    this.skyLayers = [sky, this.mountains, village];
 
     // ---- cave back walls (two layers for cross-fades)
     this.far = this.add.tileSprite(0, 0, VIEW_W, VIEW_H, 'backfar_rootsoil').setOrigin(0, 0).setScrollFactor(0).setDepth(-6).setAlpha(0);
@@ -143,12 +154,12 @@ export class RunScene extends Phaser.Scene {
     this.backNext = this.add.tileSprite(0, 0, VIEW_W, VIEW_H, 'backwall_rootsoil').setOrigin(0, 0).setScrollFactor(0).setDepth(-4).setAlpha(0);
 
     // ---- tilemap
-    this.map = this.make.tilemap({ width: COLS, height: WORLD_ROWS, tileWidth: TILE, tileHeight: TILE });
+    this.map = this.make.tilemap({ width: WIN_W, height: WIN_H, tileWidth: TILE, tileHeight: TILE });
     const ts = this.map.addTilesetImage('tiles', 'tiles', TILE, TILE, 0, 0, 0)!;
     const aoTs = this.map.addTilesetImage('ao', 'ao', TILE, TILE, 0, 0, 100000)!;
     this.aoLayer = this.map.createBlankLayer('ao', aoTs, 0, 0)!.setDepth(-3);
     this.terrain = this.map.createBlankLayer('terrain', ts, 0, 0)!.setDepth(0);
-    for (let y = 0; y < WORLD_ROWS; y++) for (let x = 0; x < COLS; x++) this.refreshTile(x, y);
+    this.winX = Number.NaN;
 
     // ---- actors
     this.flame = this.add.sprite(0, 0, 'atlas', 'flame_0').play('flame').setDepth(4).setVisible(false);
@@ -198,7 +209,10 @@ export class RunScene extends Phaser.Scene {
     this.flashRect = this.add.rectangle(0, 0, VIEW_W, VIEW_H, 0xffffff, 1).setOrigin(0, 0).setScrollFactor(0).setDepth(14).setAlpha(0);
 
     this.camY = Math.max(0, sim.player.y - VIEW_H * 0.45);
+    this.camX = sim.player.x - VIEW_W / 2;
     this.cameras.main.scrollY = this.camY;
+    this.cameras.main.scrollX = this.camX;
+    this.syncWindow();
     this.cameras.main.fadeIn(400, 7, 6, 12);
 
     if (!this.attract) {
@@ -242,27 +256,44 @@ export class RunScene extends Phaser.Scene {
     return TILES[this.sim.tileAt(x, y)].solid;
   }
 
+  /** keep the tilemap window over the camera; re-base and refill it when the view nears its edge */
+  private syncWindow() {
+    const cam = this.cameras.main;
+    const vx = Math.floor(cam.scrollX / TILE);
+    const vy = Math.floor(cam.scrollY / TILE);
+    const vw = Math.ceil(VIEW_W / TILE) + 1;
+    const vh = Math.ceil(VIEW_H / TILE) + 1;
+    if (vx >= this.winX + 1 && vx + vw <= this.winX + WIN_W - 1 && vy >= this.winY + 1 && vy + vh <= this.winY + WIN_H - 1) return;
+    this.winX = vx - Math.floor((WIN_W - vw) / 2);
+    this.winY = vy - Math.floor((WIN_H - vh) / 2);
+    this.terrain.setPosition(this.winX * TILE, this.winY * TILE);
+    this.aoLayer.setPosition(this.winX * TILE, this.winY * TILE);
+    for (let y = this.winY; y < this.winY + WIN_H; y++) for (let x = this.winX; x < this.winX + WIN_W; x++) this.refreshTile(x, y);
+  }
+
   private refreshTile(x: number, y: number) {
-    if (x < 0 || x >= COLS || y < 0 || y >= WORLD_ROWS) return;
+    const lx = x - this.winX;
+    const ly = y - this.winY;
+    if (!(lx >= 0 && lx < WIN_W && ly >= 0 && ly < WIN_H)) return;
     const t = this.sim.tileAt(x, y);
     if (t === T.air) {
-      this.terrain.removeTileAt(x, y, false, false);
+      this.terrain.removeTileAt(lx, ly, false, false);
       if (y > SKY_ROWS) {
         const m = (this.solid(x, y - 1) ? 1 : 0) | (this.solid(x + 1, y) ? 2 : 0) | (this.solid(x, y + 1) ? 4 : 0) | (this.solid(x - 1, y) ? 8 : 0);
-        if (m) this.aoLayer.putTileAt(100000 + m, x, y, false);
-        else this.aoLayer.removeTileAt(x, y, false, false);
-      }
+        if (m) this.aoLayer.putTileAt(100000 + m, lx, ly, false);
+        else this.aoLayer.removeTileAt(lx, ly, false, false);
+      } else this.aoLayer.removeTileAt(lx, ly, false, false);
       return;
     }
-    this.aoLayer.removeTileAt(x, y, false, false);
+    this.aoLayer.removeTileAt(lx, ly, false, false);
     const mask = (this.solid(x, y - 1) ? 0 : 1) | (this.solid(x + 1, y) ? 0 : 2) | (this.solid(x, y + 1) ? 0 : 4) | (this.solid(x - 1, y) ? 0 : 8);
     const v = (x & 3) + ((y & 3) << 2);
-    this.terrain.putTileAt(t * 256 + mask * 16 + v, x, y, false);
+    this.terrain.putTileAt(t * 256 + mask * 16 + v, lx, ly, false);
   }
 
   private refreshAround(x: number, y: number) {
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) this.refreshTile(x + dx, y + dy);
-    const key = y * COLS + x;
+    const key = tileKey(x, y);
     const c = this.cracks.get(key);
     if (c && this.sim.tileAt(x, y) === T.air) {
       c.destroy();
@@ -373,9 +404,9 @@ export class RunScene extends Phaser.Scene {
         break;
       case 'hit': {
         const def = TILES[e.tile];
-        const key = e.y * COLS + e.x;
+        const key = tileKey(e.x, e.y);
         const max = def.hp * sim.hpScale(e.y);
-        const frac = Math.max(0, sim.hp[key] / max);
+        const frac = Math.max(0, sim.hpAt(e.x, e.y) / max);
         const stage = Math.min(3, Math.floor((1 - frac) * 4));
         let c = this.cracks.get(key);
         if (!c) {
@@ -712,7 +743,9 @@ export class RunScene extends Phaser.Scene {
     const sim = this.sim;
     const cam = this.cameras.main;
     const y0 = Math.max(SKY_ROWS + 1, Math.floor(cam.scrollY / TILE) - 1);
-    const y1 = Math.min(WORLD_ROWS - 2, y0 + Math.ceil(VIEW_H / TILE) + 2);
+    const y1 = y0 + Math.ceil(VIEW_H / TILE) + 2;
+    const x0 = Math.floor(cam.scrollX / TILE) - 1;
+    const x1 = x0 + Math.ceil(VIEW_W / TILE) + 2;
     let used = 0;
     const counts: Record<string, [number, number]> = { rootsoil: [4, 3], amberstone: [3, 3], grotto: [3, 3], emberdeep: [3, 3], hollow: [3, 3], mantle: [3, 3], heart: [3, 3] };
     const put = (frame: string, x: number, y: number, hang: boolean) => {
@@ -729,13 +762,12 @@ export class RunScene extends Phaser.Scene {
     for (let ty = y0; ty <= y1; ty++) {
       const biome = biomeAt(depthOfRow(ty));
       const [nf, nc] = counts[biome.id];
-      for (let tx = 1; tx < COLS - 1; tx++) {
-        const i = ty * COLS + tx;
-        if (!sim.naturalAir[i] || sim.tiles[i] !== T.air) continue;
+      for (let tx = x0; tx <= x1; tx++) {
+        if (!sim.naturalAirAt(tx, ty) || sim.tileAt(tx, ty) !== T.air) continue;
         const h = ((tx * 73856093) ^ (ty * 19349663)) >>> 0;
-        if (this.solid(tx, ty + 1) && sim.naturalAir[i + COLS] === 0 && h % 100 < 38) {
+        if (this.solid(tx, ty + 1) && !sim.naturalAirAt(tx, ty + 1) && h % 100 < 38) {
           put(`decor_${biome.id}_f${(h >>> 8) % nf}`, tx * TILE + 8, ty * TILE + TILE, false);
-        } else if (this.solid(tx, ty - 1) && sim.naturalAir[i - COLS] === 0 && (h >>> 4) % 100 < 32) {
+        } else if (this.solid(tx, ty - 1) && !sim.naturalAirAt(tx, ty - 1) && (h >>> 4) % 100 < 32) {
           put(`decor_${biome.id}_c${(h >>> 12) % nc}`, tx * TILE + 8, ty * TILE, true);
         }
       }
@@ -748,9 +780,14 @@ export class RunScene extends Phaser.Scene {
     const p = this.sim.player;
     const lookAhead = p.vy > 100 ? 24 : p.drill === 'down' ? 18 : p.drill === 'up' || p.thrusting ? -10 : 0;
     const focusY = p.y;
-    const target = Phaser.Math.Clamp(focusY - VIEW_H * 0.45 + lookAhead, 0, WORLD_ROWS * TILE - VIEW_H);
+    const target = Math.max(0, focusY - VIEW_H * 0.45 + lookAhead);
     this.camY += (target - this.camY) * Math.min(1, dt * 7);
+    // sideways the camera follows loosely, leading a little in the facing direction
+    const targetX = p.x - VIEW_W / 2 + p.facing * 18 + p.vx * 0.12;
+    this.camX += (targetX - this.camX) * Math.min(1, dt * 5);
     this.cameras.main.scrollY = Math.round(this.camY);
+    this.cameras.main.scrollX = Math.round(this.camX);
+    this.syncWindow();
   }
 
   private updateBackdrop(dt: number) {
@@ -775,6 +812,10 @@ export class RunScene extends Phaser.Scene {
       this.backBiome = biome.id;
     }
     const groundY = SKY_ROWS * TILE - cam.scrollY;
+    this.back.tilePositionX = cam.scrollX;
+    this.backNext.tilePositionX = cam.scrollX;
+    this.far.tilePositionX = cam.scrollX * 0.55;
+    this.mountains.tilePositionX = cam.scrollX * 0.5;
     this.back.tilePositionY = cam.scrollY;
     this.backNext.tilePositionY = cam.scrollY;
     // the distant cave scrolls slower than the wall in front of it
@@ -854,8 +895,10 @@ export class RunScene extends Phaser.Scene {
     const survey = 1 + sim.stats.survey * 0.5;
     const y0 = Math.floor(sy / TILE) - 1;
     const y1 = y0 + Math.ceil(VIEW_H / TILE) + 2;
+    const tx0 = Math.floor(sx / TILE) - 1;
+    const tx1 = tx0 + Math.ceil(VIEW_W / TILE) + 2;
     for (let ty = Math.max(0, y0); ty <= y1; ty++) {
-      for (let tx = 0; tx < COLS; tx++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
         const tile = sim.tileAt(tx, ty);
         const def = TILES[tile];
         let gl = def.glow ?? (def.ore && sim.stats.survey > 0 ? { r: 0.6, color: def.tint } : undefined);

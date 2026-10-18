@@ -3,7 +3,7 @@ import { Sim } from '../../src/core/sim';
 
 const t0 = performance.now();
 for (const seed of [1, 2, 3]) {
-  const sim = new Sim({ seed, upgrades: {}, startDepth: 0, gloom: 0 });
+  const sim = new Sim({ seed, upgrades: {}, gloom: 0 });
   const bot = new Bot();
   let steps = 0;
   const evCount: Record<string, number> = {};

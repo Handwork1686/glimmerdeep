@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { newSave, parseSave, Save, SAVE_VERSION } from '../src/systems/save';
-import { bankRun, availableStops } from '../src/systems/bank';
+import { bankRun } from '../src/systems/bank';
 import type { RunSummary } from '../src/core/sim';
 
 const run = (o: Partial<RunSummary> = {}): RunSummary => ({
-  gold: 100, gems: 2, cores: 0, depth: 40, maxDepth: 60, startDepth: 0, time: 80, bestChain: 12, bestPot: 40, level: 4,
-  boons: { overcharge: 1 }, flares: 3, lightPickups: 2, ores: { copper: 9 }, relics: [], seals: 0, geodes: 0, reachedHeart: false,
+  gold: 100, gems: 2, cores: 0, depth: 40, maxDepth: 60, time: 80, bestChain: 12, bestPot: 40, level: 4,
+  boons: { overcharge: 1 }, flares: 3, lightPickups: 2, ores: { copper: 9 }, relics: [], seals: 0, sealsBroken: [], geodes: 0, reachedHeart: false,
   reason: 'dark', ...o,
 });
 
@@ -36,7 +36,7 @@ describe('save', () => {
   });
   it('checks every field against the shape of a fresh save', () => {
     const r = parseSave(JSON.stringify({
-      version: 3, gold: 'lots', maxGloom: -2, stop: 5, credits: 'yes',
+      version: 4, gold: 'lots', maxGloom: -2, sealsBroken: [300, 'x', 999, 300], credits: 'yes',
       stats: { runs: 'x', bestChain: 40, totalGold: null },
       settings: { master: 'loud', music: 0.3, flash: 1, bindings: { left: 'A', right: [], up: ['W', 3], down: ['S'] } },
       codex: { copper: 'many', tin: 4 }, achievements: { first_light: null, amber_age: 5 },
@@ -44,7 +44,7 @@ describe('save', () => {
     const base = newSave();
     expect(r.data.gold).toBe(0);
     expect(r.data.maxGloom).toBe(0);
-    expect(r.data.stop).toBe(base.stop);
+    expect(r.data.sealsBroken).toEqual([300]);
     expect(r.data.credits).toBe(false);
     expect(r.data.stats.runs).toBe(0);
     expect(r.data.stats.bestChain).toBe(40);
@@ -96,6 +96,25 @@ describe('save', () => {
     expect(d.codex).toEqual({});
     expect(d.relics).toEqual([]);
   });
+  it('migrates v3 saves: lifts are gone, seals you got past stay broken', () => {
+    const v3 = {
+      version: 3, gold: 77, gems: 4, cores: 1, upgrades: { root: 1, bit: 4, oil: 2 }, maxDepth: 790, stop: 'ember',
+      relics: ['oldpick', 'acorn'], codex: { copper: 50 }, achievements: { first_light: 1 }, stats: { runs: 30 },
+    };
+    const d = parseSave(JSON.stringify(v3)).data;
+    expect(d.version).toBe(SAVE_VERSION);
+    expect((d as unknown as Record<string, unknown>).stop).toBeUndefined();
+    // got below the Amber, Glimmer and Ember seals (760 + 3 rows <= 790)
+    expect(d.sealsBroken).toEqual([300, 520, 760]);
+    expect(d.maxDepth).toBe(790);
+    expect(d.gold).toBe(77);
+    expect(d.upgrades).toEqual({ root: 1, bit: 4, oil: 2 });
+    expect(d.relics).toEqual(['oldpick', 'acorn']);
+    expect(d.codex).toEqual({ copper: 50 });
+    expect(d.achievements).toEqual({ first_light: 1 });
+    // standing in a seal band is not past it
+    expect(parseSave(JSON.stringify({ ...v3, maxDepth: 301 })).data.sealsBroken).toEqual([]);
+  });
   it('migrates v1 saves', () => {
     const v1 = { version: 1, gold: 50, upgrades: { root: 1, oil: 2 }, settings: { master: 0.5 }, stats: { runs: 3 } };
     const d = parseSave(JSON.stringify(v1)).data;
@@ -119,17 +138,17 @@ describe('banking', () => {
     expect(s.codex.copper).toBe(9);
     expect(r.newDepthRecord).toBe(false);
     bankRun(s, run({ maxDepth: 130, relics: ['oldpick'] }));
-    expect(availableStops(s).map((x) => x.id)).toContain('amber');
     expect(s.relics).toEqual(['oldpick']);
   });
-  it('lift stops open by depth; the deepest only after the Heart', () => {
+  it('broken seals are banked once each and stay broken', () => {
     const s = newSave();
-    bankRun(s, run({ maxDepth: 330 }));
-    expect(availableStops(s).map((x) => x.id)).toContain('grotto');
-    bankRun(s, run({ maxDepth: 1600 }));
-    expect(availableStops(s).map((x) => x.id)).not.toContain('deep');
-    bankRun(s, run({ maxDepth: 1600, reachedHeart: true }));
-    expect(availableStops(s).map((x) => x.id)).toContain('deep');
+    bankRun(s, run({ maxDepth: 330, seals: 1, sealsBroken: [300] }));
+    expect(s.sealsBroken).toEqual([300]);
+    bankRun(s, run({ maxDepth: 540, seals: 1, sealsBroken: [520, 300] }));
+    expect(s.sealsBroken).toEqual([300, 520]);
+    // even a dig that ends in the dark keeps its seal
+    bankRun(s, run({ maxDepth: 770, seals: 1, sealsBroken: [760], reason: 'dark' }));
+    expect(s.sealsBroken).toEqual([300, 520, 760]);
   });
   it("reaching the Heart plays the finale once and opens Deep Pressure", () => {
     const s = newSave();
@@ -139,9 +158,11 @@ describe('banking', () => {
     expect(s.maxGloom).toBe(1);
     s.credits = true;
     s.gloom = 1;
-    // from the deepest stop it does not count
-    expect(bankRun(s, run({ reachedHeart: true, startDepth: 1540 })).newPressure).toBe(0);
-    const r2 = bankRun(s, run({ reachedHeart: true, startDepth: 1056 }));
+    // below your highest tier it does not count
+    s.gloom = 0;
+    expect(bankRun(s, run({ reachedHeart: true })).newPressure).toBe(0);
+    s.gloom = 1;
+    const r2 = bankRun(s, run({ reachedHeart: true }));
     expect(r2.finale).toBe(false);
     expect(s.maxGloom).toBe(2);
   });

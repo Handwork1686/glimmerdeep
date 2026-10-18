@@ -41,6 +41,9 @@ export class HudScene extends Phaser.Scene {
   private potText!: Phaser.GameObjects.BitmapText;
   private relicArrow!: Phaser.GameObjects.Image;
   private relicDist!: Phaser.GameObjects.BitmapText;
+  /** the way home: points back to the shaft when far out, and to the Heart when deep */
+  private homeArrow!: Phaser.GameObjects.Image;
+  private homeText!: Phaser.GameObjects.BitmapText;
   private seen = new Set<string>();
   private flyT = 0;
   private card!: Phaser.GameObjects.Container;
@@ -107,6 +110,8 @@ export class HudScene extends Phaser.Scene {
     // relic pointer (Survey Lamp II)
     this.relicArrow = this.add.image(0, 0, 'atlas', 'arrow').setVisible(false).setTint(0xfff0b5);
     this.relicDist = txt(this, 0, 0, '', COLORS.text).setOrigin(0.5).setVisible(false);
+    this.homeArrow = this.add.image(0, 0, 'atlas', 'arrow').setVisible(false);
+    this.homeText = txt(this, 0, 0, '', COLORS.faint).setOrigin(0.5).setVisible(false);
     // tip line
     this.tipText = txt(this, VIEW_W / 2, VIEW_H - 8, '', COLORS.text).setOrigin(0.5, 1).setAlpha(0).setCenterAlign();
     // biome card
@@ -360,13 +365,35 @@ export class HudScene extends Phaser.Scene {
     const rel = sim.stats.survey >= 2 ? sim.nearestRelic() : null;
     this.relicArrow.setVisible(!!rel);
     this.relicDist.setVisible(!!rel);
+    const cam = this.run.cameras.main;
+    const psx = sim.player.x - cam.scrollX;
+    const psy = sim.player.y - cam.scrollY;
     if (rel) {
       const a = Math.atan2(rel.y - sim.player.y, rel.x - sim.player.x);
-      const cx = VIEW_W / 2 + Math.cos(a) * 40;
-      const cy = VIEW_H / 2 + Math.sin(a) * 34;
+      const cx = psx + Math.cos(a) * 40;
+      const cy = psy + Math.sin(a) * 34;
       this.relicArrow.setPosition(Math.round(cx), Math.round(cy)).setRotation(a).setAlpha(0.6 + 0.4 * Math.sin(this.time.now / 200));
       this.relicDist.setPosition(Math.round(cx), Math.round(cy + 10)).setText(`${Math.round(rel.dist)} m`);
     }
+
+    // the way home: back to the shaft when far out sideways; deep down, the Heart beneath it
+    const tx = sim.player.x / 16;
+    const deep = !sim.reachedHeart && sim.depth() > 1380;
+    const far = Math.abs(tx) > 24;
+    this.homeArrow.setVisible(far || deep);
+    this.homeText.setVisible(far || deep);
+    if (far || deep) {
+      const hx = deep ? sim.heart.x * 16 + 16 : 8;
+      const hy = deep ? sim.heart.y * 16 + 16 : sim.player.y;
+      const a = Math.atan2(hy - sim.player.y, hx - sim.player.x);
+      const ex = Phaser.Math.Clamp(psx + Math.cos(a) * 200, 18, VIEW_W - 18);
+      const ey = Phaser.Math.Clamp(psy + Math.sin(a) * 110, 74, VIEW_H - 30);
+      const dist = Math.round(Math.hypot(hx - sim.player.x, hy - sim.player.y) / 16);
+      this.homeArrow.setPosition(Math.round(ex), Math.round(ey)).setRotation(a).setTint(deep ? 0xffd877 : 0x9a8fb0).setAlpha(0.55 + 0.25 * Math.sin(this.time.now / 300));
+      this.homeText.setPosition(Math.round(ex), Math.round(ey + 10)).setText(deep ? `Heart ${dist} m` : `shaft ${dist} m`);
+      if (far) this.tip('farOut');
+    }
+    if (Save.data.sealsBroken.some((dep) => sim.depth() >= dep && sim.depth() < dep + 8)) this.tip('sealOpen');
 
     // one-time contextual tips
     if (sim.time > 0.6) this.tip('move');

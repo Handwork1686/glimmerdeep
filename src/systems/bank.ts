@@ -1,26 +1,20 @@
 /** Applies a finished descent to the save. Pure with respect to its inputs. */
 import { BOON_BY_ID } from '../data/boons';
-import { LIFT_STOPS } from '../data/biomes';
 import type { RunSummary } from '../core/sim';
 import type { SaveData } from './save';
-import { DEMO } from '../config';
+import { cleanSeals } from './save';
 
 export interface BankResult {
   newDepthRecord: boolean;
   newChainRecord: boolean;
-  unlockedStops: string[];
   /** first time the World's Heart was reached: play the ending */
   finale: boolean;
   /** a new Deep Pressure tier opened */
   newPressure: number;
 }
 
-/** A run counts toward Deep Pressure only if it started above the Mantle. */
-export const PRESSURE_START_LIMIT = 1100;
-
 export function bankRun(save: SaveData, r: RunSummary): BankResult {
-  const res: BankResult = { newDepthRecord: false, newChainRecord: false, unlockedStops: [], finale: false, newPressure: 0 };
-  const stopsBefore = availableStops(save).map((s) => s.id);
+  const res: BankResult = { newDepthRecord: false, newChainRecord: false, finale: false, newPressure: 0 };
   save.gold += r.gold;
   save.gems += r.gems;
   save.cores += r.cores;
@@ -32,6 +26,8 @@ export function bankRun(save: SaveData, r: RunSummary): BankResult {
   save.stats.longestRun = Math.max(save.stats.longestRun, r.time);
   save.stats.bestPot = Math.max(save.stats.bestPot, r.bestPot);
   save.stats.seals += r.seals;
+  // broken seals stay broken
+  save.sealsBroken = cleanSeals([...save.sealsBroken, ...r.sealsBroken]);
   save.stats.geodes += r.geodes;
   if (r.bestChain > save.stats.bestChain) {
     res.newChainRecord = save.stats.bestChain > 0;
@@ -50,8 +46,8 @@ export function bankRun(save: SaveData, r: RunSummary): BankResult {
   if (r.reachedHeart) {
     save.stats.hearts++;
     if (!save.credits) res.finale = true;
-    // reaching the Heart at your highest pressure, from above the Mantle, opens the next tier
-    if (save.maxGloom === 0 || (save.gloom >= save.maxGloom && r.startDepth <= PRESSURE_START_LIMIT)) {
+    // reaching the Heart at your highest pressure opens the next tier (every dig starts at the surface)
+    if (save.maxGloom === 0 || save.gloom >= save.maxGloom) {
       const next = Math.min(10, Math.max(1, save.gloom + 1));
       if (next > save.maxGloom) {
         save.maxGloom = next;
@@ -59,10 +55,5 @@ export function bankRun(save: SaveData, r: RunSummary): BankResult {
       }
     }
   }
-  res.unlockedStops = availableStops(save).map((s) => s.id).filter((id) => !stopsBefore.includes(id));
   return res;
-}
-
-export function availableStops(save: SaveData) {
-  return LIFT_STOPS.filter((s) => !DEMO || s.depth < 200).filter((s) => s.depth === 0 || (save.maxDepth >= s.depth && (!s.afterHeart || save.stats.hearts > 0)));
 }

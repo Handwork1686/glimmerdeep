@@ -4,8 +4,9 @@
  * build uses localStorage.
  */
 import { DEMO } from '../config';
+import { SEAL_ROWS, SEALS } from '../data/biomes';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 const KEY = DEMO ? 'glimmerdeep.demo.save' : 'glimmerdeep.save';
 
 export type Action = 'left' | 'right' | 'up' | 'down' | 'flare' | 'bomb' | 'pause' | 'confirm' | 'back';
@@ -33,7 +34,8 @@ export interface SaveData {
   cores: number;
   upgrades: Record<string, number>;
   maxDepth: number;
-  stop: string;
+  /** depths of the Strata Seals broken so far: they stay broken on every dig */
+  sealsBroken: number[];
   gloom: number;
   maxGloom: number;
   seedCounter: number;
@@ -87,7 +89,7 @@ export function defaultSettings(): Settings {
 
 export function newSave(): SaveData {
   return {
-    version: SAVE_VERSION, gold: 0, gems: 0, cores: 0, upgrades: { root: 1 }, maxDepth: 0, stop: 'surface',
+    version: SAVE_VERSION, gold: 0, gems: 0, cores: 0, upgrades: { root: 1 }, maxDepth: 0, sealsBroken: [],
     gloom: 0, maxGloom: 0, seedCounter: 1,
     stats: {
       runs: 0, totalGold: 0, totalGems: 0, flares: 0, bestChain: 0, playTime: 0, nodesBought: 0, longestRun: 0, mythics: 0, maxBoons: 0,
@@ -140,7 +142,28 @@ const MIGRATIONS: Record<number, Migration> = {
     d.version = 3;
     return d;
   },
+  // v3 -> v4: the lifts are gone (every dig starts at the surface) and broken
+  // seals stay broken. Having been below a seal's band proves it was broken.
+  3: (d) => {
+    delete d.stop;
+    const max = isNum(d.maxDepth) ? d.maxDepth : 0;
+    d.sealsBroken = sealsBelow(max);
+    d.version = 4;
+    return d;
+  },
 };
+
+/** seals a save that has reached `maxDepth` must have broken (never the demo's Amber Seal) */
+export function sealsBelow(maxDepth: number): number[] {
+  return SEALS.filter((s, i) => maxDepth >= s.depth + SEAL_ROWS && !(DEMO && i === 0)).map((s) => s.depth);
+}
+
+/** a clean list of broken seal depths: known seals only, each once, in order */
+export function cleanSeals(stored: unknown): number[] {
+  if (!Array.isArray(stored)) return [];
+  const known = SEALS.filter((_, i) => !(DEMO && i === 0)).map((s) => s.depth);
+  return known.filter((dep) => stored.includes(dep));
+}
 
 /** v2 combat nodes and their old costs (base gold, gems, cores, tier multiplier) */
 const REMOVED_V3: Record<string, { gold: number; gems?: number; cores?: number; tier: number }> = {
@@ -222,6 +245,7 @@ export function parseSave(raw: string | null): { data: SaveData; recovered: bool
       tips: flagMap(d.tips),
       seenNodes: { ...base.seenNodes, ...flagMap(d.seenNodes) },
       relics: Array.isArray(d.relics) ? (d.relics as unknown[]).filter((x): x is string => typeof x === 'string') : [],
+      sealsBroken: cleanSeals(d.sealsBroken),
       version: SAVE_VERSION,
     };
     merged.settings.bindings = bindings(isMap(d.settings) ? d.settings.bindings : undefined);

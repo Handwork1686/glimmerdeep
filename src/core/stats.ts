@@ -1,3 +1,5 @@
+import { NO_PROSPECT, Prospect } from './worldgen';
+
 /** Derived player stats: base values modified by Workshop upgrades, relics and run boons. */
 export interface Stats {
   maxLight: number; // lantern fuel
@@ -62,6 +64,8 @@ export interface Stats {
   banishes: number;
   headStart: number;
   luck: number;
+  /** world-shaping stats: what newly generated ground contains */
+  prospect: Prospect;
 }
 
 export function baseStats(): Stats {
@@ -73,6 +77,6 @@ export function baseStats(): Stats {
     chainPot: 0.06, chainTime: 1.2, chainFuel: 0.06, resonance: 0, cataclysm: false, prismHeart: false, supernova: false,
     goldMul: 1, doubleOre: 0, gemChance: 0, deepPockets: 0, costMul: 1, fossilBonus: 0, xpMul: 1, survey: 0, midas: false, midasTouch: 0,
     flareCooldown: 10, flareRadius: 40, flareDamage: 8, dynamite: 0, drones: 0, boonChoices: 3, rerolls: 0, banishes: 0, headStart: 0,
-    luck: 0,
+    luck: 0, prospect: { ...NO_PROSPECT },
   };
 }

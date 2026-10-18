@@ -4,7 +4,7 @@ import { parseSave } from '../src/systems/save';
 
 describe('review fixes', () => {
   it('two second winds (node + boon) give two revives', () => {
-    const sim = new Sim({ seed: 2, upgrades: { root: 1, secondwind: 1 }, startDepth: 0, gloom: 0 });
+    const sim = new Sim({ seed: 2, upgrades: { root: 1, secondwind: 1 }, gloom: 0 });
     sim.boons.secondwind = 1;
     sim.stats.secondWind = 2;
     let revives = 0;
@@ -16,7 +16,7 @@ describe('review fixes', () => {
   });
   it('head start always grants a boon', () => {
     for (let seed = 1; seed < 40; seed++) {
-      const sim = new Sim({ seed, upgrades: { root: 1, headstart: 1 }, startDepth: 0, gloom: 0 });
+      const sim = new Sim({ seed, upgrades: { root: 1, headstart: 1 }, gloom: 0 });
       expect(Object.values(sim.boons).reduce((a, b) => a + b, 0)).toBe(1);
     }
   });

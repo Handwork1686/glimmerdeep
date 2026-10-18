@@ -142,22 +142,3 @@ export const SEAL_ROWS = 3;
 /** The World's Heart chamber: a great cavern with the heart crystal at its centre. */
 export const HEART_DEPTH = 1500;
 export const HEART_CHAMBER = 18;
-
-export interface LiftStop {
-  id: string;
-  name: string;
-  depth: number;
-  /** only after the World's Heart has been reached */
-  afterHeart?: boolean;
-}
-
-/** A stop opens once you have reached its depth on foot. */
-export const LIFT_STOPS: LiftStop[] = [
-  { id: 'surface', name: 'Hearthmoor', depth: 0 },
-  { id: 'amber', name: 'Amber Landing', depth: 122 },
-  { id: 'grotto', name: 'Grotto Gate', depth: 306 },
-  { id: 'ember', name: 'Ember Stair', depth: 526 },
-  { id: 'hollow', name: 'Hollow Rim', depth: 766 },
-  { id: 'mantle', name: 'Mantle Steps', depth: 1056 },
-  { id: 'deep', name: 'The Deep Heart', depth: 1540, afterHeart: true },
-];
