@@ -4,9 +4,10 @@
 
 A peaceful incremental mining game for Steam:
 - Digs last 2–6 minutes, and nothing down there can hurt you.
-- Chains of ore and crystal fill a pot that pays out multiplied when the streak ends.
-- Seven layers to the World's Heart, 22 ores, geodes, 24 relics and a Codex.
-- A 70-node upgrade web with no ceiling.
+- Everything good underground is a shard source: crystals, embers, cinnabar, geodes, veins. Hit them and the screen erupts; chains of shards fill a pot that pays out multiplied when the streak ends.
+- An open world: dig as far left or right as you like, and down as far as it goes. Every dig starts at the surface; seals you break stay broken.
+- Seven layers to the World's Heart, 22 ores, 11 shard types, geodes, 24 relics and a Codex.
+- A 78-node upgrade web with seven playstyles (including upgrading the world itself) and no ceiling.
 - About 2.5–3 hours to the credits, then endless depths and ten Deep Pressure tiers.
 
 Everything was made in this repository from code: design, pixel art, music, sound, code and store assets.
@@ -36,7 +37,7 @@ npm run dist:demo      # Next Fest demo (ends at the first Strata Seal) in relea
 |---|---|---|
 | Move / drill | WASD or arrows | stick |
 | Thrust | W / Space | A |
-| Flare | E | X |
+| Shard Bomb | E / Shift | X / RB |
 | Dynamite | Q | Y |
 | Pause | Esc | Start |
 

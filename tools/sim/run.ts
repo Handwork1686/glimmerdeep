@@ -29,13 +29,13 @@ const BALANCED: Record<string, number> = { drill: 1.0, light: 0.95, fortune: 0.8
 type BuildId = 'balanced' | 'drill' | 'shard' | 'chain' | 'lantern' | 'fortune' | 'surveyor' | 'arcana';
 const BUILDS: Record<BuildId, { branches: Record<string, number>; nodes: string[] }> = {
   balanced: { branches: BALANCED, nodes: [] },
-  drill: { branches: { drill: 1 }, nodes: ['refine_bit'] },
+  drill: { branches: { drill: 1 }, nodes: [] },
   shard: { branches: { shatter: 1 }, nodes: ['gyro', 'splitter', 'shrapnel', 'shardveins'] },
-  chain: { branches: {}, nodes: ['bounty', 'longfuse', 'potplus', 'recycler', 'refine_chain', 'resonance', 'heatsink', 'treads', 'gyro', 'brittle', 'keen'] },
-  lantern: { branches: { light: 1 }, nodes: ['refine_wick', 'flora'] },
-  fortune: { branches: { fortune: 1 }, nodes: ['refine_purse', 'refine_luck', 'richveins'] },
+  chain: { branches: {}, nodes: ['bounty', 'longfuse', 'potplus', 'recycler', 'resonance', 'heatsink', 'treads', 'gyro', 'brittle', 'keen'] },
+  lantern: { branches: { light: 1 }, nodes: ['flora'] },
+  fortune: { branches: { fortune: 1 }, nodes: ['richveins'] },
   surveyor: { branches: { world: 1 }, nodes: [] },
-  arcana: { branches: { arcana: 1 }, nodes: ['refine_luck'] },
+  arcana: { branches: { arcana: 1 }, nodes: [] },
 };
 const OFF = 0.12; // weight for nodes outside the build
 function priority(id: string, branch: string, gated: boolean): number {
