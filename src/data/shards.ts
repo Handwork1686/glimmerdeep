@@ -70,7 +70,7 @@ export const BASE_SHARD_DAMAGE = 6;
 /** at most this many shards from one burst; extra count turns into damage */
 export const MAX_PER_BURST = 28;
 /** at most this many shards in flight; extra count turns into damage */
-export const MAX_ACTIVE_SHARDS = 450;
+export const MAX_ACTIVE_SHARDS = 300;
 /** shards keep pace with harder rock the deeper they fly */
 export const shardDepthScale = (depth: number) => 1 + Math.max(0, depth) / 250;
 /** Codex key for a shard type */

@@ -53,7 +53,7 @@ All rebindable. In a level-up hand the Shard Bomb key banishes a card.
 | Burst size | +% shards from burst sources | Shrapnel (node and boon) |
 | Ricochet | bounces off what it can't break | Ricochet |
 
-Damage = source power x (shard damage / 6) x type multiplier x (1 + depth / 250). Caps: 28 shards per burst and 450 in flight; past a cap the extra count becomes damage on the shards that do fly. Cascades burn out: tiles broken by shards throw fewer shards once a chain passes ~300 links, and none after 8 generations.
+Damage = source power x (shard damage / 6) x type multiplier x (1 + depth / 250). Caps: 28 shards per burst and 300 in flight; past a cap the extra count becomes damage on the shards that do fly. Cascades burn out: tiles broken by shards throw fewer shards once a chain passes ~300 links, and none after 8 generations.
 
 **Eleven types**, each with its own silhouette, behaviour and Codex entry (`src/data/shards.ts`):
 

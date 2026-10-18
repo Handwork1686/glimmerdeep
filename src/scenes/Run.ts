@@ -704,9 +704,12 @@ export class RunScene extends Phaser.Scene {
       this.pickupSpr.delete(id);
     }
 
-    // shards
+    // shards (only the ones in view get a sprite; the trail budget stays flat however many fly)
     alive.clear();
+    const cam = this.cameras.main;
+    const sparkP = Math.min(0.5, 8 / Math.max(1, sim.shards.length));
     for (const sh of sim.shards) {
+      if (sh.x < cam.scrollX - 24 || sh.x > cam.scrollX + VIEW_W + 24 || sh.y < cam.scrollY - 24 || sh.y > cam.scrollY + VIEW_H + 24) continue;
       alive.add(sh.id);
       let s = this.shardSpr.get(sh.id);
       if (!s) {
@@ -714,7 +717,7 @@ export class RunScene extends Phaser.Scene {
         this.shardSpr.set(sh.id, s);
       }
       s.setPosition(Math.round(sh.x), Math.round(sh.y)).setRotation(Math.atan2(sh.vy, sh.vx));
-      if (Math.random() < (sim.shards.length > 60 ? 0.12 : 0.5)) {
+      if (Math.random() < sparkP) {
         this.sparks.setParticleTint(sh.color);
         this.sparks.emitParticleAt(sh.x, sh.y, 1);
       }
@@ -937,8 +940,10 @@ export class RunScene extends Phaser.Scene {
     const y1 = y0 + Math.ceil(VIEW_H / TILE) + 2;
     const tx0 = Math.floor(sx / TILE) - 1;
     const tx1 = tx0 + Math.ceil(VIEW_W / TILE) + 2;
-    for (let ty = Math.max(0, y0); ty <= y1; ty++) {
-      for (let tx = tx0; tx <= tx1; tx++) {
+    // a rich, surveyed view can hold hundreds of lights: cap the draws so it stays smooth
+    let lights = 140;
+    for (let ty = Math.max(0, y0); ty <= y1 && lights > 0; ty++) {
+      for (let tx = tx0; tx <= tx1 && lights > 0; tx++) {
         const tile = sim.tileAt(tx, ty);
         const def = TILES[tile];
         let gl = def.glow ?? (def.ore && sim.stats.survey > 0 ? { r: 0.6, color: def.tint } : undefined);
@@ -949,7 +954,8 @@ export class RunScene extends Phaser.Scene {
         const pulse = 0.85 + 0.15 * Math.sin(this.time.now / 400 + tx * 1.7 + ty);
         this.tileLight.setScale((gl.r * TILE * 2 * pulse) / 32);
         this.dark.erase(this.tileLight, wx - sx, wy - sy);
-        if (this.glowUsed < 160) this.glow(wx, wy, gl.color, gl.r * 0.8 * pulse, 0.35 + 0.15 * (survey - 1));
+        lights--;
+        if (this.glowUsed < 90) this.glow(wx, wy, gl.color, gl.r * 0.8 * pulse, 0.35 + 0.15 * (survey - 1));
       }
     }
     // pickups and shards emit a little light so they stay readable

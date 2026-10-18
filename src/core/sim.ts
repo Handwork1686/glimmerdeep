@@ -196,6 +196,8 @@ export const cascadeDamp = (chain: number) => 1 / (1 + Math.max(0, chain - 300) 
 const CASCADE_MAX_GEN = 8;
 /** pickups this close home in at once; everything homes after AUTO_HOME seconds */
 const AUTO_PULL = 30;
+/** at most this many pickups fly at once; more are banked on the spot */
+const MAX_PICKUPS = 180;
 const AUTO_HOME = 2.5;
 /** void shards turn at most this fast (rad/s): a curve, not an aimbot */
 const STEER_RATE = 5;
@@ -788,10 +790,13 @@ export class Sim {
   spawnPickup(kind: ItemKind, x: number, y: number, v: { gold?: number; gems?: number; cores?: number; light?: number }) {
     const a = this.rng.range(-Math.PI * 0.85, -Math.PI * 0.15);
     const sp = this.rng.range(50, 110);
-    this.pickups.push({
+    const pk: Pickup = {
       id: this.id(), kind, x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
       gold: v.gold ?? 0, gems: v.gems ?? 0, cores: v.cores ?? 0, light: v.light ?? 0, age: 0, done: false,
-    });
+    };
+    // in a huge cascade the air is already full of loot: bank the rest straight away
+    if (this.pickups.length >= MAX_PICKUPS) this.collect(pk);
+    else this.pickups.push(pk);
   }
 
   private collect(pk: Pickup) {
