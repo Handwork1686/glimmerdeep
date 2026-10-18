@@ -16,7 +16,6 @@
   "gem_pickup": 1,
   "core_pickup": 1,
   "explode": 3,
-  "flare": 2,
   "throw": 2,
   "thrust_start": 2,
   "land": 2,
@@ -43,7 +42,9 @@
   "relic": 1,
   "discover": 1,
   "heart_break": 1,
-  "drill_loop": 1
+  "drill_loop": 1,
+  "shardbomb": 2,
+  "embershard": 3
  },
  "music": {
   "title": {

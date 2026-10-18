@@ -136,7 +136,7 @@ describe('simulation', () => {
     const weak = new Sim({ seed: 4, upgrades: { root: 1 }, gloom: 0 });
     const row = rowOfDepth(SEALS[0].depth);
     expect(weak.damageTile(0, row, 1e9, 'drill')).toBe(false);
-    expect(weak.damageTile(0, row, 1e9, 'blast')).toBe(false);
+    expect(weak.damageTile(0, row, 1e9, 'shard')).toBe(false);
     expect(weak.drainEvents().some((e) => e.t === 'sealDeny')).toBe(true);
     const strong = new Sim({ seed: 4, upgrades: { root: 1, bit: 5, diamond: 2 }, gloom: 0 });
     expect(strong.stats.drillPower).toBeGreaterThanOrEqual(SEALS[0].power);

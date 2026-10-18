@@ -1,5 +1,6 @@
 /** Achievement definitions, unlock checks and the Steam bridge. */
 import { RELICS } from '../data/relics';
+import { SHARD_TYPES, shardCodexKey } from '../data/shards';
 import { ORE_KINDS } from '../data/tiles';
 import { UPGRADES } from '../data/upgrades';
 import type { RunSummary } from '../core/sim';
@@ -14,9 +15,11 @@ export interface AchievementDef {
   check: (s: SaveData, run?: RunSummary) => boolean;
 }
 
-const codexPct = (s: SaveData) => {
+/** share of the whole Codex discovered: ores, shard types and relics (22 + 11 + 24) */
+export const codexPct = (s: SaveData) => {
   const ores = ORE_KINDS.filter((k) => (s.codex[k] ?? 0) > 0).length;
-  return (ores + s.relics.length) / (ORE_KINDS.length + RELICS.length);
+  const shards = SHARD_TYPES.filter((t) => (s.codex[shardCodexKey(t.id)] ?? 0) > 0).length;
+  return (ores + shards + s.relics.length) / (ORE_KINDS.length + SHARD_TYPES.length + RELICS.length);
 };
 
 export const ACHIEVEMENTS: AchievementDef[] = [
@@ -50,7 +53,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'artisan', name: 'Master Artisan', desc: 'Max out every Workshop node.', icon: 'star', check: (s) => UPGRADES.every((u) => u.infinite || (s.upgrades[u.id] ?? 0) >= u.max) },
   { id: 'hoarder', name: 'Boon Hoarder', desc: 'Hold 10 boons in a single dig.', icon: 'dice', check: (s) => s.stats.maxBoons >= 10 },
   { id: 'mythic', name: 'Touched by Myth', desc: 'Take a mythic boon.', icon: 'star', check: (s) => s.stats.mythics >= 1 },
-  { id: 'flare_gun', name: 'Flare Gun', desc: 'Fire 500 flares.', icon: 'flare', check: (s) => s.stats.flares >= 500 },
+  { id: 'flare_gun', name: 'Shard Bomber', desc: 'Throw 500 Shard Bombs.', icon: 'shardbomb', check: (s) => s.stats.bombs >= 500 },
   { id: 'deep_breath', name: 'Deep Breath', desc: 'Make a single dig last 5 minutes.', icon: 'clock', check: (s) => s.stats.longestRun >= 300 },
   { id: 'gloom1', name: 'Feeling the Weight', desc: 'Finish a dig on Deep Pressure 1.', icon: 'eye', check: (s, r) => !!r && s.gloom >= 1 },
   { id: 'gloom5', name: 'Crushing Depths', desc: "Reach the World's Heart on Deep Pressure 5.", icon: 'eye', check: (s, r) => !!r && s.gloom >= 5 && r.reachedHeart },

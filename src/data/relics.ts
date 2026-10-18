@@ -25,8 +25,8 @@ export const RELICS: RelicDef[] = [
   // Amberstone
   r({ id: 'ambereye', name: 'Amber Eye', biome: 'amberstone', lore: 'A beetle, trapped mid-thought, a million years ago.', perk: '+5% gold', apply: (s) => { s.goldMul += 0.05; } }),
   r({ id: 'sundial', name: 'Buried Sundial', biome: 'amberstone', lore: 'It has been noon down here for a very long time.', perk: 'Fuel drains 3% slower', apply: (s) => { s.lightDrain *= 0.97; } }),
-  r({ id: 'shellhorn', name: 'Spiral Horn', biome: 'amberstone', lore: 'Blow it and the rock answers.', perk: 'Crystals burst into +1 shard', apply: (s) => { s.shardBonus += 1; } }),
-  r({ id: 'miniature', name: 'Tin Miniature', biome: 'amberstone', lore: 'A little miner, lantern held high.', perk: '+10% pickup radius', apply: (s) => { s.magnet *= 1.1; } }),
+  r({ id: 'shellhorn', name: 'Spiral Horn', biome: 'amberstone', lore: 'Blow it and the rock answers.', perk: 'Shard bursts throw +1 shard', apply: (s) => { s.shardBonus += 1; } }),
+  r({ id: 'miniature', name: 'Tin Miniature', biome: 'amberstone', lore: 'A little miner, lantern held high.', perk: '+4% gold', apply: (s) => { s.goldMul *= 1.04; } }),
   // Grotto
   r({ id: 'geodeheart', name: 'Singing Geode', biome: 'grotto', lore: 'Hold it to your ear: it hums the Grotto\'s note.', perk: 'Chain pot grows 5% faster', apply: (s) => { s.chainPot *= 1.05; } }),
   r({ id: 'mirror', name: 'Mirror Shard', biome: 'grotto', lore: 'Your reflection in it is always smiling.', perk: '+5% light radius', apply: (s) => { s.lightRadius += 0.05; } }),
@@ -35,7 +35,7 @@ export const RELICS: RelicDef[] = [
   // Emberdeep
   r({ id: 'forgecoal', name: 'Undying Coal', biome: 'emberdeep', lore: 'It has been burning since the world was young.', perk: '+8 lantern fuel', apply: (s) => { s.maxLight += 8; } }),
   r({ id: 'anvil', name: 'Thumb Anvil', biome: 'emberdeep', lore: 'Small enough for a pocket. Heavy as a promise.', perk: '+3% drill power', apply: (s) => { s.drillPower *= 1.03; } }),
-  r({ id: 'salamander', name: 'Salamander Scale', biome: 'emberdeep', lore: 'It shimmers like heat over stone.', perk: 'Explosions +10% damage', apply: (s) => { s.blastMul += 0.1; } }),
+  r({ id: 'salamander', name: 'Salamander Scale', biome: 'emberdeep', lore: 'It shimmers like heat over stone.', perk: 'Ember shards burst into +1 spark', apply: (s) => { s.emberSplit += 1; } }),
   r({ id: 'bellows', name: 'Tiny Bellows', biome: 'emberdeep', lore: 'One puff and the drill runs hotter.', perk: 'Drill heat +5% speed', apply: (s) => { s.heatMax += 0.05; } }),
   // Hollow
   r({ id: 'starcompass', name: 'Star Compass', biome: 'hollow', lore: 'It points down. Always down.', perk: 'Ore 4% chance to drop double', apply: (s) => { s.doubleOre += 0.04; } }),

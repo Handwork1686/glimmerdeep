@@ -1,5 +1,6 @@
 /** Applies a finished descent to the save. Pure with respect to its inputs. */
 import { BOON_BY_ID } from '../data/boons';
+import { shardCodexKey, type ShardId } from '../data/shards';
 import type { RunSummary } from '../core/sim';
 import type { SaveData } from './save';
 import { cleanSeals } from './save';
@@ -21,7 +22,9 @@ export function bankRun(save: SaveData, r: RunSummary): BankResult {
   save.stats.runs++;
   save.stats.totalGold += r.gold;
   save.stats.totalGems += r.gems;
-  save.stats.flares += r.flares;
+  save.stats.bombs += r.bombs;
+  // the Codex: every kind of shard you have set loose
+  for (const [k, v] of Object.entries(r.shardTypes)) save.codex[shardCodexKey(k as ShardId)] = (save.codex[shardCodexKey(k as ShardId)] ?? 0) + (v ?? 0);
   save.stats.playTime += r.time;
   save.stats.longestRun = Math.max(save.stats.longestRun, r.time);
   save.stats.bestPot = Math.max(save.stats.bestPot, r.bestPot);

@@ -37,7 +37,7 @@ if (script === 'basic' || script === 'run') {
   await shot('04_side');
   await key('e');
   await wait(150);
-  await shot('05_flare');
+  await shot('05_shardbomb');
   await page.keyboard.down('ArrowDown');
   await wait(6000);
   await page.keyboard.up('ArrowDown');

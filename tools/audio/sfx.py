@@ -175,21 +175,35 @@ def explode(r):
     return drive(mix(nz, boom, crackle), 2.0) * 0.85
 
 
-def flare(r):
-    d = 0.7
+def shardbomb(r):
+    """The Shard Bomb: a soft thump, then a glassy burst that scatters in every direction."""
+    d = 0.8
     n = n_(d)
-    wh = np.zeros(n)
-    nz = noise(d)
-    steps = 24
-    seg = n // steps
-    for i in range(steps):
-        k = i / steps
-        wh[i * seg:(i + 1) * seg] = bp(nz[i * seg:(i + 1) * seg], 400 + 3000 * k, 1200 + 7000 * k)
-    wh *= env(n, 0.12, 0.1, 0.5, 0.35)
-    burst = sum(osc("sine", midi_hz(note(m)), d) for m in ("A5", "E6", "A6")) * exp_decay(n, 0.2) * 0.25
+    thump = kick(0.35, 140, 45, 0.28) * 0.7
     out = np.zeros(n)
-    out[n_(0.1):] += burst[: n - n_(0.1)]
-    return wet(wh * 0.6 + out, 0.3) * 0.8
+    out[: len(thump)] += thump[:n]
+    # a spray of tiny shatters, each a little higher, spreading out over 0.3 s
+    for k in range(9):
+        at = n_(0.02 + k * 0.03 * r.uniform(0.7, 1.3))
+        f = 1700 * r.uniform(0.9, 1.15) * (1 + k * 0.06)
+        L = n_(0.22)
+        tone = sum(osc("sine", f * ratio, 0.22) * (0.3 / (1 + j)) for j, ratio in enumerate((1.0, 1.52, 2.21)))
+        ping = (tone + hp(noise(0.22), 5000) * 0.25) * exp_decay(L, 0.05)
+        out[at:at + L] += ping[: n - at] * (0.5 - k * 0.03)
+    return wet(out, 0.3, 1.1, 7000) * 0.85
+
+
+def embershard(r):
+    """An ember shard popping into sparks: a short crackle with a warm body."""
+    d = 0.25
+    n = n_(d)
+    body = bp(noise(d), 300, 1400) * exp_decay(n, 0.05) * 0.6
+    crackle = np.zeros(n)
+    for _ in range(6):
+        i = r.integers(0, n_(0.15))
+        k = hp(noise(0.006), 3500) * r.uniform(0.15, 0.4)
+        crackle[i:i + len(k)] += k[: n - i]
+    return drive(body + crackle, 1.6) * 0.7
 
 
 def throw(r):
@@ -489,7 +503,7 @@ RECIPES = {
     "ui_move": (ui_move, 3), "ui_select": (ui_select, 1), "ui_back": (ui_back, 1), "ui_deny": (ui_deny, 1), "tick": (tick, 3),
     "drill_rock": (drill_rock, 4), "drill_ore": (drill_ore, 3), "break_rock": (break_rock, 4), "break_ore": (break_ore, 3),
     "shatter": (shatter, 3), "crystal": (crystal, 3), "pickup": (pickup, 1), "light_pickup": (light_pickup, 1),
-    "gem_pickup": (gem_pickup, 1), "core_pickup": (core_pickup, 1), "explode": (explode, 3), "flare": (flare, 2),
+    "gem_pickup": (gem_pickup, 1), "core_pickup": (core_pickup, 1), "explode": (explode, 3), "shardbomb": (shardbomb, 2), "embershard": (embershard, 3),
     "throw": (throw, 2), "thrust_start": (thrust_start, 2), "land": (land, 2), "clank": (clank, 2),
     "levelup": (levelup, 1), "boon_pick": (boon_pick, 1), "reroll": (reroll, 1), "banish": (banish, 1),
     "chain_big": (chain_big, 2), "second_wind": (second_wind, 1), "achievement": (achievement, 1), "buy": (buy, 2),

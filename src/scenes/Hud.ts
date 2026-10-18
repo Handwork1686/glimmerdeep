@@ -3,6 +3,7 @@ import { VIEW_H, VIEW_W } from '../config';
 import { biomeAt } from '../data/biomes';
 import { BoonDef, RARITY_COLOR } from '../data/boons';
 import { RELIC_BY_ID } from '../data/relics';
+import { SHARD_BY_ID, shardCodexKey, type ShardId } from '../data/shards';
 import { xpForLevel } from '../core/progression';
 import { potMultiplier, type SimEvent } from '../core/sim';
 import { Audio } from '../systems/audio';
@@ -31,9 +32,9 @@ export class HudScene extends Phaser.Scene {
   private coreIcon!: Phaser.GameObjects.Image;
   private xpBar!: Phaser.GameObjects.Graphics;
   private lvText!: Phaser.GameObjects.BitmapText;
-  private flareIcon!: Phaser.GameObjects.Image;
-  private flareFill!: Phaser.GameObjects.Graphics;
-  private flareKey!: Phaser.GameObjects.BitmapText;
+  private shardBombIcon!: Phaser.GameObjects.Image;
+  private shardBombFill!: Phaser.GameObjects.Graphics;
+  private shardBombKey!: Phaser.GameObjects.BitmapText;
   private bombIcon!: Phaser.GameObjects.Image;
   private bombText!: Phaser.GameObjects.BitmapText;
   private chainText!: Phaser.GameObjects.BitmapText;
@@ -86,10 +87,10 @@ export class HudScene extends Phaser.Scene {
     this.add.image(10, 10, 'atlas', 'ico_light').setOrigin(0.5);
     this.lightBar = this.add.graphics();
     this.lightText = txt(this, 18, 15, '', COLORS.text).setOrigin(0, 0);
-    // flare + dynamite
-    this.flareIcon = this.add.image(11, 32, 'atlas', 'icon_flare');
-    this.flareFill = this.add.graphics();
-    this.flareKey = txt(this, 20, 28, '', COLORS.dim);
+    // Shard Bomb + dynamite
+    this.shardBombIcon = this.add.image(11, 32, 'atlas', 'icon_shardbomb');
+    this.shardBombFill = this.add.graphics();
+    this.shardBombKey = txt(this, 20, 28, '', COLORS.dim);
     this.bombIcon = this.add.image(48, 32, 'atlas', 'icon_bomb').setVisible(false);
     this.bombText = txt(this, 56, 28, '', COLORS.text).setVisible(false);
     // depth & currencies
@@ -186,6 +187,15 @@ export class HudScene extends Phaser.Scene {
     Audio.play('discover');
   }
 
+  /** first time a kind of shard flies: a card, and it joins the Codex when the dig is banked */
+  private discoverShard(id: ShardId) {
+    const key = shardCodexKey(id);
+    if (this.seen.has(key) || (Save.data.codex[key] ?? 0) > 0) return;
+    this.seen.add(key);
+    this.showCard(`${S.cards.newShard}: ${SHARD_BY_ID[id].name.toUpperCase()}`, SHARD_BY_ID[id].desc);
+    Audio.play('discover');
+  }
+
   private makeVignette(): string {
     const key = 'vignette';
     if (this.textures.exists(key)) return key;
@@ -242,6 +252,10 @@ export class HudScene extends Phaser.Scene {
       case 'geode':
         this.tip('geode');
         break;
+      case 'shard':
+        this.tip('shards');
+        this.discoverShard(e.type);
+        break;
       case 'relic': {
         const r = RELIC_BY_ID[e.id];
         if (r) this.showCard(r.name.toUpperCase(), `${S.cards.relic}: ${r.perk}`);
@@ -255,7 +269,7 @@ export class HudScene extends Phaser.Scene {
         this.tilesBroken++;
         if (this.tilesBroken === 6) this.tip('thrust');
         if (e.chain >= 3) this.tip('crystal');
-        if (this.tilesBroken === 60) this.tip('flare');
+        if (this.tilesBroken === 60) this.tip('shardbomb');
         break;
       case 'levelup':
         this.tip('levelup');
@@ -296,16 +310,16 @@ export class HudScene extends Phaser.Scene {
     if (low && beat && !this.beatLatch) Audio.play('heartbeat', { volume: 0.5 });
     this.beatLatch = beat;
 
-    // flare cooldown
-    const cd = sim.player.flareCd;
+    // Shard Bomb recharge
+    const cd = sim.player.bombCd;
     const ready = cd <= 0;
-    this.flareIcon.setAlpha(ready ? 1 : 0.45);
-    this.flareFill.clear();
+    this.shardBombIcon.setAlpha(ready ? 1 : 0.45);
+    this.shardBombFill.clear();
     if (!ready) {
-      const k = 1 - cd / sim.stats.flareCooldown;
-      this.flareFill.fillStyle(0xfff0b5, 0.5).fillRect(4, 39 - Math.round(14 * k), 14, Math.round(14 * k));
+      const k = 1 - cd / Math.max(2, sim.stats.bombCooldown);
+      this.shardBombFill.fillStyle(0xfff0b5, 0.5).fillRect(4, 39 - Math.round(14 * k), 14, Math.round(14 * k));
     }
-    this.flareKey.setText(ready ? Controls.label('flare') : `${cd.toFixed(1)}`);
+    this.shardBombKey.setText(ready ? Controls.label('shardbomb') : `${cd.toFixed(1)}`);
     const dyn = sim.player.dynamite;
     this.bombIcon.setVisible(sim.stats.dynamite > 0);
     this.bombText.setVisible(sim.stats.dynamite > 0).setText(`${dyn}`);
@@ -464,7 +478,7 @@ export class HudScene extends Phaser.Scene {
     const sim = this.run.sim;
     const opts: string[] = [];
     if (sim.rerolls > 0) opts.push(`${Controls.label('bomb')}: reroll (${sim.rerolls})`);
-    if (sim.banishes > 0) opts.push(`${Controls.label('flare')}: banish (${sim.banishes})`);
+    if (sim.banishes > 0) opts.push(`${Controls.label('shardbomb')}: banish (${sim.banishes})`);
     opts.push(`${Controls.label('back')}: skip (+8 fuel)`);
     c.add(txt(this, VIEW_W / 2, 204, opts.join('     '), COLORS.dim).setOrigin(0.5, 0));
     this.choice = c;
@@ -536,7 +550,7 @@ export class HudScene extends Phaser.Scene {
       const defs = (this.run.sim.reroll(), this.run.sim.choices);
       Audio.play('reroll');
       if (defs) this.openChoice(defs);
-    } else if (Controls.pressed('flare') && this.run.sim.banishes > 0) {
+    } else if (Controls.pressed('shardbomb') && this.run.sim.banishes > 0) {
       const id = this.choiceDefs[this.choiceIndex].id;
       this.closeChoice();
       this.run.sim.banish(id);

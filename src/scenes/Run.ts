@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { DEMO, SKY_ROWS, STEP, TILE, VIEW_H, VIEW_W } from '../config';
 import { biomeAt } from '../data/biomes';
+import { SHARD_BY_ID } from '../data/shards';
 import { ITEM_GLOW, T, TILES } from '../data/tiles';
 import { UPGRADES } from '../data/upgrades';
 import { Bot } from '../core/bot';
@@ -77,14 +78,15 @@ export class RunScene extends Phaser.Scene {
   private winY = 0;
   private mountains!: Phaser.GameObjects.TileSprite;
   private flicker = 1;
-  /** flare / dynamite presses wait here until a fixed step consumes them */
-  private flareQueued = false;
+  /** Shard Bomb / dynamite presses wait here until a fixed step consumes them */
+  private shardBombQueued = false;
   /** set once this run's loot has been written to the save */
   banked = false;
   private recoil = 0;
   private bombQueued = false;
   private wasThrusting = false;
   private drillSoundT = 0;
+  private burstSoundT = 0;
   private drillLoop: ReturnType<typeof Audio.loop> = null;
   private lowLightT = 0;
   private lastDepthShown = -1;
@@ -322,7 +324,7 @@ export class RunScene extends Phaser.Scene {
       this.hitstop -= dt;
     } else if ((!sim.choices || sim.reachedHeart) && !sim.over) {
       this.acc += dt * (this.attract ? 1 : Save.data.settings.speed);
-      if (Controls.pressed('flare')) this.flareQueued = true;
+      if (Controls.pressed('shardbomb')) this.shardBombQueued = true;
       if (Controls.pressed('bomb')) this.bombQueued = true;
       while (this.acc >= STEP) {
         this.acc -= STEP;
@@ -331,9 +333,9 @@ export class RunScene extends Phaser.Scene {
         else {
           inp = {
             left: Controls.isDown('left'), right: Controls.isDown('right'), up: Controls.isDown('up'), down: Controls.isDown('down'),
-            flare: this.flareQueued, bomb: this.bombQueued,
+            shardBomb: this.shardBombQueued, bomb: this.bombQueued,
           };
-          this.flareQueued = false;
+          this.shardBombQueued = false;
           this.bombQueued = false;
         }
         sim.step(inp);
@@ -475,10 +477,37 @@ export class RunScene extends Phaser.Scene {
         if (e.light > 0) this.popup(`+${Math.round(e.light)}`, sim.player.x, sim.player.y - 14, 0xffd877, 'ico_light');
         break;
       }
-      case 'shard':
+      case 'shard': {
+        // every burst is a little flash of its shard colour; big ones kick the camera
+        if (e.n >= 4) {
+          this.sparks.setParticleTint(SHARD_BY_ID[e.type].color);
+          this.sparks.explode(Math.min(14, e.n), e.x, e.y);
+        }
+        if (e.type === 'ember' || e.type === 'cinnabar') {
+          this.embers.explode(Math.min(10, e.n * 2), e.x, e.y);
+          if (this.burstSoundT <= 0) {
+            Audio.play('embershard', { volume: 0.55, jitter: 0.1, pan: pan(e.x) });
+            this.burstSoundT = 0.07;
+          }
+        }
+        if (e.n >= 10) this.shake(90, 0.0025);
         break;
-      case 'explode': {
-        const s = this.add.sprite(e.x, e.y, 'atlas', 'boom_0').setDepth(11).setScale(Math.max(0.8, e.r / 2.2)).play('boom');
+      }
+      case 'boonEcho':
+        this.popup('ECHO!', sim.player.x, sim.player.y - 20, 0xb862de);
+        Audio.play('boon_pick', { volume: 0.6, rate: 1.3 });
+        break;
+      case 'cataclysm': {
+        const ring = this.add.circle(e.x, e.y, 6).setStrokeStyle(3, 0xffd877).setDepth(11).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: ring, radius: 70, alpha: 0, duration: 420, ease: 'Cubic.easeOut', onUpdate: () => ring.setRadius(ring.radius), onComplete: () => ring.destroy() });
+        this.flash(0xffd877, 110, 0.18);
+        this.shake(260, 0.006);
+        this.hitstop = Math.max(this.hitstop, 0.05);
+        Audio.play('shardbomb', { volume: 1, rate: 0.8 });
+        break;
+      }
+      case 'dynamite': {
+        const s = this.add.sprite(e.x, e.y, 'atlas', 'boom_0').setDepth(11).setScale(1.2).play('boom');
         s.once('animationcomplete', () => s.destroy());
         this.embers.explode(14, e.x, e.y);
         this.chips.setParticleTint(0x685e86);
@@ -489,15 +518,16 @@ export class RunScene extends Phaser.Scene {
         Audio.play('explode', { volume: 0.9, jitter: 0.08, pan: pan(e.x) });
         break;
       }
-      case 'flare': {
-        const ring = this.add.circle(e.x, e.y, 4).setStrokeStyle(2, 0xfff0b5).setDepth(11).setBlendMode(Phaser.BlendModes.ADD);
-        this.tweens.add({ targets: ring, radius: e.r, alpha: 0, duration: 320, ease: 'Cubic.easeOut', onUpdate: () => ring.setRadius(ring.radius), onComplete: () => ring.destroy() });
-        this.sparks.setParticleTint(0xfff0b5);
+      case 'shardBomb': {
+        const ring = this.add.circle(e.x, e.y, 4).setStrokeStyle(2, 0xc8ecff).setDepth(11).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: ring, radius: 44, alpha: 0, duration: 300, ease: 'Cubic.easeOut', onUpdate: () => ring.setRadius(ring.radius), onComplete: () => ring.destroy() });
+        this.sparks.setParticleTint(0xc8ecff);
         this.sparks.explode(24, e.x, e.y);
         this.flicker = 2.2;
-        this.flash(0xfff0b5, 90, 0.15);
-        this.shake(120, 0.003);
-        Audio.play('flare');
+        this.flash(0xc8ecff, 90, 0.15);
+        this.shake(160, 0.004);
+        this.hitstop = Math.max(this.hitstop, 0.035);
+        Audio.play('shardbomb', { pan: pan(e.x) });
         break;
       }
       case 'bombThrow':
@@ -600,6 +630,7 @@ export class RunScene extends Phaser.Scene {
     const sim = this.sim;
     const p = sim.player;
     this.drillSoundT -= dt;
+    this.burstSoundT -= dt;
     this.goldPopTimer -= dt;
     if (this.goldPopTimer <= 0 && this.pendingGold > 0) {
       this.popup(`+${fmt(Math.max(1, this.pendingGold))}`, p.x, p.y - 14, 0xffd877, 'ico_gold');
@@ -679,7 +710,7 @@ export class RunScene extends Phaser.Scene {
       alive.add(sh.id);
       let s = this.shardSpr.get(sh.id);
       if (!s) {
-        s = this.add.image(sh.x, sh.y, 'atlas', 'shard').setDepth(11).setTint(sh.color).setBlendMode(Phaser.BlendModes.ADD);
+        s = this.add.image(sh.x, sh.y, 'atlas', `shard_${sh.type}`).setDepth(11).setTint(sh.color).setBlendMode(Phaser.BlendModes.ADD);
         this.shardSpr.set(sh.id, s);
       }
       s.setPosition(Math.round(sh.x), Math.round(sh.y)).setRotation(Math.atan2(sh.vy, sh.vx));

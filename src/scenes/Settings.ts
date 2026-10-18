@@ -69,8 +69,8 @@ export class SettingsScene extends Phaser.Scene {
       ];
     } else {
       title = 'CONTROLS';
-      const acts: Action[] = ['left', 'right', 'up', 'down', 'flare', 'bomb', 'pause', 'confirm'];
-      const names: Record<string, string> = { left: 'Move left', right: 'Move right', up: 'Thrust / up', down: 'Drill down', flare: 'Flare', bomb: 'Dynamite', pause: 'Pause', confirm: 'Confirm' };
+      const acts: Action[] = ['left', 'right', 'up', 'down', 'shardbomb', 'bomb', 'pause', 'confirm'];
+      const names: Record<string, string> = { left: 'Move left', right: 'Move right', up: 'Thrust / up', down: 'Drill down', shardbomb: 'Shard Bomb', bomb: 'Dynamite', pause: 'Pause', confirm: 'Confirm' };
       items = acts.map((a) => ({
         label: () => `${names[a].padEnd(14, ' ')} ${this.waiting === a ? '...press a key' : s.bindings[a].slice(0, 2).join(' / ')}`,
         onSelect: () => this.rebind(a),

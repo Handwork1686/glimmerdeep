@@ -158,6 +158,32 @@ def vfx() -> dict[str, Canvas]:
         cv.px(x, 1, WHITE if x > 2 else GREY)
     cv.px(5, 0, GREY); cv.px(5, 2, GREY); cv.px(4, 0, DGREY); cv.px(4, 2, DGREY)
     f["shard"] = cv
+    # one silhouette per shard type (pointing right, tinted in game): shape, never colour alone
+    shapes = {
+        "glass": ["....++..", "-++#####", "....++.."],
+        "crystal": ["...+#...", ".+###+..", "-######+", ".+###+..", "...+#..."],
+        "ember": ["....##.", "-+.####", "-++####", "-+.####", "....##."],
+        "cinnabar": [".####+", "######", "######", ".####+"],
+        "geode": [".+#+.", "+###+", "#####", "+###+", ".+#+."],
+        "vein": [".#...#.", "#+#.#+#", "...#..."],
+        "fault": ["#.....", "##+...", "####+.", "##+...", "#....."],
+        "cataclysm": ["...#...", "...#...", "..###..", "#######", "..###..", "...#...", "...#..."],
+        "void": [".+##.", "+#...", "#....", "+#...", ".+##."],
+        "prism": ["#.....", "#+#...", "#..+#.", "#+#...", "#....."],
+        "rune": ["#####", "#...#", "#.+.#", "#...#", "#####"],
+    }
+    for name, rows in shapes.items():
+        w = max(len(r) for r in rows)
+        cv = Canvas(w, len(rows))
+        for y, r in enumerate(rows):
+            for x, ch in enumerate(r):
+                if ch == "#":
+                    cv.px(x, y, WHITE)
+                elif ch == "+":
+                    cv.px(x, y, GREY)
+                elif ch == "-":
+                    cv.px(x, y, DGREY)
+        f[f"shard_{name}"] = cv
     # hit spark burst, 3 frames, 9x9
     for i in range(3):
         cv = Canvas(9, 9)
@@ -323,6 +349,19 @@ ICON_KEY = {"o": "void0", "1": "stone1", "2": "stone2", "3": "stone3", "4": "sil
             "t": "teal2", "T": "teal3", "b": "blue2", "B": "blue3", "v": "violet2", "V": "violet3", "g": "moss2", "G": "moss3"}
 
 ICONS = {
+    "shardbomb": [
+        "..W......W..",
+        "...W....W...",
+        ".....oo.....",
+        "...oottoo...",
+        "..otTTTTto..",
+        "W.otTWWTto.W",
+        "..otTWWTto..",
+        "..otTTTTto..",
+        "...oottoo...",
+        "...W.oo.W...",
+        "..W......W..",
+    ],
     "lantern": [
         "....oo......",
         "...o..o.....",
@@ -444,17 +483,6 @@ ICONS = {
         "..oAAAAAAo..",
         "...oooooo...",
     ],
-    "magnet": [
-        ".oooo..oooo.",
-        "oRRRo..oRRRo",
-        "orrro..orrro",
-        "orrro..orrro",
-        "orrro..orrro",
-        "orrrooooRrro",
-        ".orrrrrrrro.",
-        "..oorrrroo..",
-        "....oooo....",
-    ],
     "gem": [
         "...oooooo...",
         "..oBBbBBbo..",
@@ -464,18 +492,6 @@ ICONS = {
         "..obbbbbbo..",
         "...obbbbo...",
         "....obbo....",
-        ".....oo.....",
-    ],
-    "flare": [
-        ".....oo.....",
-        "..o..oo..o..",
-        "...o.ll.o...",
-        "....oWWo....",
-        "oollWWWWlloo",
-        "oollWWWWlloo",
-        "....oWWo....",
-        "...o.ll.o...",
-        "..o..oo..o..",
         ".....oo.....",
     ],
     "bomb": [
@@ -544,18 +560,6 @@ ICONS = {
         "....oGgo....",
         "....oggo....",
         "....oooo....",
-    ],
-    "lift": [
-        "oooooooooooo",
-        "o1o......o1o",
-        "o1o.oooo.o1o",
-        "o1oo3333oo1o",
-        "o1o334433o1o",
-        "o1o333333o1o",
-        "o1o222222o1o",
-        "o1oooooooo1o",
-        "o1o......o1o",
-        "oooooooooooo",
     ],
     "skull": [
         "..oooooo....",

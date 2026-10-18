@@ -1,7 +1,7 @@
 /**
  * A simple autopilot used for balance simulation, soak tests and the attract
- * mode. It greedily mines toward nearby ore, crystals and relics, flares when
- * that would set off a chain, and otherwise digs downward.
+ * mode. It greedily mines toward nearby ore, crystals and relics, throws the
+ * Shard Bomb when that would set off a chain, and otherwise digs downward.
  */
 import { TILE } from '../config';
 import { TILES } from '../data/tiles';
@@ -109,16 +109,12 @@ export class Bot {
     if (px <= -ROAM) this.wander = 1;
     if (px >= ROAM) this.wander = -1;
 
-    // flare when it would start a chain: crystals or embers inside the flare radius
+    // Shard Bomb when it would set off a chain: shard sources within reach
     let fuel = 0;
-    const fr = Math.ceil(sim.stats.flareRadius / TILE);
-    if (p.flareCd <= 0) {
-      for (let dy = -fr; dy <= fr; dy++) for (let dx = -fr; dx <= fr; dx++) {
-        const t = TILES[sim.tileAt(px + dx, py + dy)];
-        if (t.shards || t.explode) fuel++;
-      }
+    if (p.bombCd <= 0) {
+      for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) if (TILES[sim.tileAt(px + dx, py + dy)].shards) fuel++;
     }
-    inp.flare = fuel >= 2 && p.flareCd <= 0;
+    inp.shardBomb = fuel >= 2 && p.bombCd <= 0;
     inp.bomb = p.dynamite > 0 && sim.time % 20 < 0.02;
     return inp;
   }

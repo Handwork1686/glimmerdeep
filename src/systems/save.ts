@@ -6,10 +6,10 @@
 import { DEMO } from '../config';
 import { SEAL_ROWS, SEALS } from '../data/biomes';
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 const KEY = DEMO ? 'glimmerdeep.demo.save' : 'glimmerdeep.save';
 
-export type Action = 'left' | 'right' | 'up' | 'down' | 'flare' | 'bomb' | 'pause' | 'confirm' | 'back';
+export type Action = 'left' | 'right' | 'up' | 'down' | 'shardbomb' | 'bomb' | 'pause' | 'confirm' | 'back';
 
 export interface Settings {
   master: number;
@@ -43,7 +43,8 @@ export interface SaveData {
     runs: number;
     totalGold: number;
     totalGems: number;
-    flares: number;
+    /** Shard Bombs thrown */
+    bombs: number;
     bestChain: number;
     playTime: number;
     nodesBought: number;
@@ -73,7 +74,7 @@ export const DEFAULT_BINDINGS: Record<Action, string[]> = {
   right: ['D', 'RIGHT'],
   up: ['W', 'UP', 'SPACE'],
   down: ['S', 'DOWN'],
-  flare: ['E', 'SHIFT'],
+  shardbomb: ['E', 'SHIFT'],
   bomb: ['Q', 'X'],
   pause: ['ESC', 'P'],
   confirm: ['ENTER', 'SPACE', 'Z'],
@@ -92,7 +93,7 @@ export function newSave(): SaveData {
     version: SAVE_VERSION, gold: 0, gems: 0, cores: 0, upgrades: { root: 1 }, maxDepth: 0, sealsBroken: [],
     gloom: 0, maxGloom: 0, seedCounter: 1,
     stats: {
-      runs: 0, totalGold: 0, totalGems: 0, flares: 0, bestChain: 0, playTime: 0, nodesBought: 0, longestRun: 0, mythics: 0, maxBoons: 0,
+      runs: 0, totalGold: 0, totalGems: 0, bombs: 0, bestChain: 0, playTime: 0, nodesBought: 0, longestRun: 0, mythics: 0, maxBoons: 0,
       endless: 0, bestPot: 0, seals: 0, geodes: 0, hearts: 0,
     },
     codex: {}, relics: [], achievements: {}, tips: {}, seenNodes: { root: true }, credits: false, settings: defaultSettings(),
@@ -151,6 +152,70 @@ const MIGRATIONS: Record<number, Migration> = {
     d.version = 4;
     return d;
   },
+  // v4 -> v5: the Flare became the Shard Bomb (same keys, no upgrades of its
+  // own) and pickups always auto-collect. Refund the flare and magnet nodes in
+  // full, keep the player's own keys for the bomb, carry the throw count over.
+  4: (d) => {
+    const ups = isMap(d.upgrades) ? (d.upgrades as Record<string, unknown>) : {};
+    const refund = refundNodes(ups, REMOVED_V5);
+    d.upgrades = ups;
+    d.gold = (isNum(d.gold) ? d.gold : 0) + refund.gold;
+    d.gems = (isNum(d.gems) ? d.gems : 0) + refund.gems;
+    d.cores = (isNum(d.cores) ? d.cores : 0) + refund.cores;
+    const st = isMap(d.stats) ? d.stats : {};
+    if (isNum(st.flares)) st.bombs = st.flares;
+    delete st.flares;
+    d.stats = st;
+    const set = isMap(d.settings) ? d.settings : null;
+    if (set && isMap(set.bindings)) {
+      const b = set.bindings as Record<string, unknown>;
+      if (b.flare !== undefined) b.shardbomb = b.flare;
+      delete b.flare;
+    }
+    const tips = isMap(d.tips) ? d.tips : null;
+    if (tips) {
+      delete tips.flare;
+      delete tips.lift;
+    }
+    d.version = 5;
+    return d;
+  },
+};
+
+interface Snapshot {
+  gold: number;
+  gems?: number;
+  cores?: number;
+  growth: number;
+  /** ring tier multiplier at the time */
+  tier: number;
+  /** the price scale at the time */
+  econ: number;
+}
+
+/** refund every level of the removed nodes at the list price the player paid, and drop them */
+function refundNodes(ups: Record<string, unknown>, removed: Record<string, Snapshot>) {
+  const refund = { gold: 0, gems: 0, cores: 0 };
+  for (const [id, o] of Object.entries(removed)) {
+    const raw = ups[id];
+    const lvl = isNum(raw) ? Math.max(0, Math.min(Math.floor(raw), 9)) : 0;
+    for (let l = 0; l < lvl; l++) {
+      refund.gold += Math.round(o.gold * Math.pow(o.growth, l) * o.tier * o.econ);
+      refund.gems += o.gems ? Math.ceil(o.gems * Math.pow(1.5, l)) : 0;
+      refund.cores += o.cores ?? 0;
+    }
+    delete ups[id];
+  }
+  return refund;
+}
+
+/** v4 flare and magnet nodes, frozen as they were priced when removed */
+const REMOVED_V5: Record<string, Snapshot> = {
+  flarecd: { gold: 20, growth: 1.85, tier: 1, econ: 3.5 },
+  flarer: { gold: 60, growth: 1.85, tier: 1, econ: 3.5 },
+  flarep: { gold: 70, growth: 1.85, tier: 1, econ: 3.5 },
+  magnet: { gold: 35, growth: 1.85, tier: 1, econ: 3.5 },
+  magnet2: { gold: 4000, gems: 5, growth: 1.85, tier: 7, econ: 3.5 },
 };
 
 /** seals a save that has reached `maxDepth` must have broken (never the demo's Amber Seal) */

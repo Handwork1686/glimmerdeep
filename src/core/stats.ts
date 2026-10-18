@@ -26,20 +26,25 @@ export interface Stats {
 
   moveSpeed: number;
   thrust: number;
-  magnet: number; // px
 
-  shardBonus: number;
-  shardDamage: number;
-  shatter: number; // chance any rock emits shards
-  veinRupture: number; // fraction of connected same-ore damage
-  blastRadius: number; // added tiles
-  blastMul: number;
-  ricochet: number;
+  // ---- shards: one global path; every shard type reads these
+  shardBonus: number; // +shards on every burst, from every source
+  shardDamage: number; // base damage (BASE_SHARD_DAMAGE at start)
+  shardSpeed: number; // speed and range multiplier
+  shardPierce: number; // extra tiles every shard breaks through
+  shardSplit: number; // chance a shard splits in two on impact
+  burstBonus: number; // burst sources (embers, cinnabar, geodes, bombs...) throw this fraction more
+  faultChance: number; // chance plain rock cracks into fault shards
+  veinRupture: number; // chance breaking ore ruptures its whole vein into vein shards
+  emberSplit: number; // extra sparks per ember shard impact
+  cinnabarMul: number; // cinnabar shard damage multiplier
+  ricochet: number; // bounces off tiles a shard fails to break
   chainPot: number; // chain pot multiplier growth
   chainTime: number; // seconds a chain stays alive
   chainFuel: number; // fuel per chain link
   resonance: number; // fuel per 10 links
   cataclysm: boolean;
+  cataclysmEvery: number; // links per Cataclysm volley
   prismHeart: boolean;
   supernova: boolean;
 
@@ -54,10 +59,9 @@ export interface Stats {
   midas: boolean;
   midasTouch: number; // chance rock drops a gold nugget
 
-  flareCooldown: number;
-  flareRadius: number; // px
-  flareDamage: number;
-  dynamite: number; // count per run
+  bombCooldown: number; // Shard Bomb recharge (s)
+  dynamite: number; // cinnabar charges per run
+  boonEcho: number; // chance a picked boon is taken twice
   drones: number;
   boonChoices: number;
   rerolls: number;
@@ -72,11 +76,12 @@ export function baseStats(): Stats {
   return {
     maxLight: 60, lightDrain: 1, lightRadius: 1, lastLight: false, mossMul: 1, amberMul: 1, kindling: 0, secondWind: 0, astral: 0,
     drillPower: 2, drillRate: 4, wideBit: 0, echoEvery: 0, rockMul: 1, oreMul: 1, seismic: 0, heatMax: 0.4, auger: 0, excavator: false, plow: 1,
-    moveSpeed: 74, thrust: 1350, magnet: 26,
-    shardBonus: 0, shardDamage: 6, shatter: 0, veinRupture: 0, blastRadius: 0, blastMul: 1, ricochet: 0,
-    chainPot: 0.06, chainTime: 1.2, chainFuel: 0.06, resonance: 0, cataclysm: false, prismHeart: false, supernova: false,
+    moveSpeed: 74, thrust: 1350,
+    shardBonus: 0, shardDamage: 6, shardSpeed: 1, shardPierce: 0, shardSplit: 0, burstBonus: 0, faultChance: 0, veinRupture: 0,
+    emberSplit: 0, cinnabarMul: 1, ricochet: 0,
+    chainPot: 0.06, chainTime: 1.2, chainFuel: 0.06, resonance: 0, cataclysm: false, cataclysmEvery: 25, prismHeart: false, supernova: false,
     goldMul: 1, doubleOre: 0, gemChance: 0, deepPockets: 0, costMul: 1, fossilBonus: 0, xpMul: 1, survey: 0, midas: false, midasTouch: 0,
-    flareCooldown: 10, flareRadius: 40, flareDamage: 8, dynamite: 0, drones: 0, boonChoices: 3, rerolls: 0, banishes: 0, headStart: 0,
+    bombCooldown: 10, dynamite: 0, boonEcho: 0, drones: 0, boonChoices: 3, rerolls: 0, banishes: 0, headStart: 0,
     luck: 0, prospect: { ...NO_PROSPECT },
   };
 }

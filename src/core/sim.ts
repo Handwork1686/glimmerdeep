@@ -5,6 +5,7 @@
 import { SKY_ROWS, STEP, TILE } from '../config';
 import { biomeAt, SEAL_ROWS, SEALS } from '../data/biomes';
 import { BOON_BY_ID, BoonDef, BOONS } from '../data/boons';
+import { BASE_SHARD_DAMAGE, MAX_ACTIVE_SHARDS, MAX_PER_BURST, SHARD_BY_ID, ShardId, shardDepthScale } from '../data/shards';
 import { ItemKind, T, TILES } from '../data/tiles';
 import { computeStats, GloomMods, gloomMods, rollBoons, xpForLevel } from './progression';
 import { Rng } from './rng';
@@ -17,11 +18,11 @@ export interface SimInput {
   right: boolean;
   up: boolean;
   down: boolean;
-  flare: boolean; // edge-triggered by the caller
-  bomb: boolean; // edge-triggered by the caller
+  shardBomb: boolean; // edge-triggered by the caller
+  bomb: boolean; // dynamite; edge-triggered by the caller
 }
 
-export const NO_INPUT: SimInput = { left: false, right: false, up: false, down: false, flare: false, bomb: false };
+export const NO_INPUT: SimInput = { left: false, right: false, up: false, down: false, shardBomb: false, bomb: false };
 
 export type DrillDir = 'left' | 'right' | 'up' | 'down' | null;
 
@@ -41,7 +42,8 @@ export interface Player {
   drillTimer: number;
   drillTarget: { x: number; y: number } | null;
   hitCount: number;
-  flareCd: number;
+  /** Shard Bomb recharge left (s) */
+  bombCd: number;
   fallFrom: number;
   thrusting: boolean;
   dynamite: number;
@@ -56,6 +58,7 @@ export interface Player {
 
 export interface Shard {
   id: number;
+  type: ShardId;
   x: number;
   y: number;
   vx: number;
@@ -64,6 +67,14 @@ export interface Shard {
   dmg: number;
   color: number;
   bounces: number;
+  /** tiles it can still break through */
+  pierce: number;
+  /** sparks thrown on first impact (ember) */
+  burst: number;
+  /** splits in two on first impact (prism) */
+  split: boolean;
+  /** curves toward ore and crystal (void) */
+  seek: boolean;
   gen: number;
 }
 
@@ -110,9 +121,10 @@ export type SimEvent =
   | { t: 'hit'; x: number; y: number; tile: number; src: string }
   | { t: 'break'; x: number; y: number; tile: number; src: string; chain: number }
   | { t: 'pickup'; kind: ItemKind; gold: number; gems: number; cores: number; light: number; x: number; y: number }
-  | { t: 'shard'; x: number; y: number }
-  | { t: 'explode'; x: number; y: number; r: number }
-  | { t: 'flare'; x: number; y: number; r: number }
+  | { t: 'shard'; x: number; y: number; type: ShardId; n: number }
+  | { t: 'dynamite'; x: number; y: number }
+  | { t: 'shardBomb'; x: number; y: number }
+  | { t: 'cataclysm'; x: number; y: number }
   | { t: 'bombThrow' }
   | { t: 'levelup'; level: number }
   | { t: 'chainLink'; count: number }
@@ -127,6 +139,7 @@ export type SimEvent =
   | { t: 'relic'; id: string; x: number; y: number }
   | { t: 'heart'; x: number; y: number }
   | { t: 'secondWind' }
+  | { t: 'boonEcho'; id: string }
   | { t: 'biome'; id: string; name: string }
   | { t: 'end'; reason: EndReason };
 
@@ -144,7 +157,10 @@ export interface RunSummary {
   bestPot: number;
   level: number;
   boons: Record<string, number>;
-  flares: number;
+  /** Shard Bombs thrown */
+  bombs: number;
+  /** shards thrown this dig, by type (the Codex) */
+  shardTypes: Partial<Record<ShardId, number>>;
   lightPickups: number;
   /** ore pieces mined this run, by kind */
   ores: Partial<Record<ItemKind, number>>;
@@ -174,6 +190,12 @@ export interface SimConfig {
 const G = 900;
 const MAX_FALL = 330;
 const COYOTE = 0.09;
+/** pickups this close home in at once; everything homes after AUTO_HOME seconds */
+const AUTO_PULL = 30;
+const AUTO_HOME = 2.5;
+/** void shards turn at most this fast (rad/s): a curve, not an aimbot */
+const STEER_RATE = 5;
+const CRYSTAL_SHARDS = new Set<ShardId>(['glass', 'crystal', 'void', 'prism']);
 const CORNER_ASSIST = [-1, -2, -3, -4, 1, 2, 3, 4];
 const CORNER_ASSIST_AIR = [-1, -2, -3, -4, -5, -6, 1, 2, 3, 4, 5, 6];
 /** chain pot multiplier for a chain of n links */
@@ -222,7 +244,8 @@ export class Sim {
   /** gold mined during the current chain: paid out x multiplier when it ends */
   potGold = 0;
   bestPot = 0;
-  flares = 0;
+  bombsUsed = 0;
+  shardSpawned: Partial<Record<ShardId, number>> = {};
   lightPickups = 0;
   ores: Partial<Record<ItemKind, number>> = {};
   relicsFound: string[] = [];
@@ -238,8 +261,7 @@ export class Sim {
   /** seconds until the dig ends after the Heart breaks */
   private heartEndT = -1;
   private nextId = 1;
-  private blastQueue: { x: number; y: number; r: number; dmg: number; delay: number }[] = [];
-  /** tiles that shatter on a timer (seal waves, the heart) */
+  /** tiles that shatter on a timer (seal waves, the heart, Supernova) */
   private breakQueue: { x: number; y: number; delay: number }[] = [];
   private sealDenyT = 0;
   private sealsShattered = new Set<number>();
@@ -268,7 +290,7 @@ export class Sim {
     this.player = {
       x: 0, y: (SKY_ROWS - 1) * TILE + TILE - 6, vx: 0, vy: 0, w: 12, h: 12, facing: 1, grounded: false,
       blockL: false, blockR: false, blockU: false, drill: null, drillTimer: 0, drillTarget: null, hitCount: 0,
-      flareCd: 0, fallFrom: 0, thrusting: false, dynamite: this.stats.dynamite, thrustT: 0, groundT: 0, heat: 0, plowCd: 0,
+      bombCd: 0, fallFrom: 0, thrusting: false, dynamite: this.stats.dynamite, thrustT: 0, groundT: 0, heat: 0, plowCd: 0,
     };
     if (cfg.debugDepth && cfg.debugDepth > 0) {
       const row = rowOfDepth(cfg.debugDepth);
@@ -393,7 +415,11 @@ export class Sim {
     this.emit({ t: 'tile', x, y });
   }
 
-  damageTile(x: number, y: number, dmg: number, src: 'drill' | 'shard' | 'blast' | 'flare' | 'drone' | 'rupture' | 'seismic', gen = 0): boolean {
+  /**
+   * Damage a tile. Everything that breaks rock is the drill, a shard, a drone or
+   * a seismic landing: there is no other damage path.
+   */
+  damageTile(x: number, y: number, dmg: number, src: 'drill' | 'shard' | 'drone' | 'seismic', gen = 0, by?: ShardId): boolean {
     const tile = this.tileAt(x, y);
     const def = TILES[tile];
     if (tile === T.air || def.unbreakable) return false;
@@ -413,19 +439,19 @@ export class Sim {
     const left = this.world.hp(x, y) - dmg * mult;
     this.world.setHp(x, y, left);
     if (left <= 0) {
-      this.breakTile(x, y, src, gen);
+      this.breakTile(x, y, src, gen, by);
       return true;
     }
     this.emit({ t: 'hit', x, y, tile, src });
     return false;
   }
 
-  private breakTile(x: number, y: number, src: string, gen: number) {
+  private breakTile(x: number, y: number, src: string, gen: number, by?: ShardId) {
     const tile = this.tileAt(x, y);
     const def = TILES[tile];
     this.world.set(x, y, T.air);
     // every cascade break is a link; so is every ore, crystal or gem you drill
-    const cascade = src === 'shard' || src === 'blast' || src === 'rupture' || src === 'flare';
+    const cascade = src === 'shard' || src === 'wave';
     const valuable = this.isValuable(tile) || tile === T.seal || tile === T.geode;
     const linked = cascade || valuable;
     if (linked) this.link();
@@ -474,14 +500,15 @@ export class Sim {
     }
     if (tile === T.seal) this.shatterSeal(x, y);
     if (tile === T.worldheart) this.breakHeart(cx, cy);
-    // chain effects
-    let shardCount = def.shards ? def.shards + this.stats.shardBonus : 0;
-    if (!shardCount && !def.ore && this.stats.shatter > 0 && src !== 'flare' && this.rng.chance(Math.min(0.3, this.stats.shatter))) shardCount = 2;
-    if (shardCount > 0) this.burstShards(cx, cy, shardCount, def.tint, gen);
-    if (def.explode) {
-      this.blastQueue.push({ x: cx, y: cy, r: def.explode.radius + this.stats.blastRadius, dmg: def.explode.damage * this.stats.blastMul * (1 + depth / 600), delay: 0.09 });
+    // shard sources: everything resolves through spawnShards
+    if (tile === T.geode) this.geodeVolley(cx, cy, depth, gen);
+    else if (def.shards) this.spawnShards(cx, cy, def.shardType ?? 'glass', def.shards, { power: def.shardPower, gen });
+    else if (tile === T.seal && src === 'wave' && this.rng.chance(0.34)) this.spawnShards(cx, cy, 'rune', 1, { exact: true, gen });
+    // fault shards never crack more fault lines: plain rock would cascade forever
+    else if (!def.ore && !def.light && tile !== T.seal && by !== 'fault' && this.stats.faultChance > 0 && this.rng.chance(Math.min(0.3, this.stats.faultChance))) {
+      this.spawnShards(cx, cy, 'fault', 2, { gen });
     }
-    if (def.ore && this.stats.veinRupture > 0 && src !== 'rupture') this.rupture(x, y, tile);
+    if (def.ore && by !== 'vein' && this.stats.veinRupture > 0 && this.rng.chance(Math.min(0.9, this.stats.veinRupture))) this.rupture(x, y, tile);
     // something above may fall
     this.checkFall(x, y - 1);
   }
@@ -507,9 +534,9 @@ export class Sim {
     }
     if (this.stats.cataclysm) {
       this.chainLinksForCataclysm++;
-      if (this.chainLinksForCataclysm >= 25) {
+      if (this.chainLinksForCataclysm >= this.stats.cataclysmEvery) {
         this.chainLinksForCataclysm = 0;
-        this.doFlare(true);
+        this.cataclysmVolley();
       }
     }
   }
@@ -578,9 +605,10 @@ export class Sim {
     for (let k = 0; k < 3; k++) this.spawnPickup('core', cx, cy, { cores: 1 });
     const g = 400 * this.stats.goldMul * this.valueScale(1500);
     for (let k = 0; k < 24; k++) this.spawnPickup('heartstone', cx, cy, { gold: g / 24 });
-    this.burstShards(cx, cy, 24, 0xffd877, 0);
+    this.spawnShards(cx, cy, 'prism', 24, { power: 40 });
   }
 
+  /** Vein Rupture: the whole connected vein throws vein shards and tears itself apart */
   private rupture(x: number, y: number, tile: number) {
     const seen = new Set<number>();
     const stack = [[x, y]];
@@ -599,8 +627,10 @@ export class Sim {
         }
       }
     }
-    const dmg = TILES[tile].hp * this.hpScale(y) * this.stats.veinRupture;
-    for (const [hx, hy] of hits) this.damageTile(hx, hy, dmg, 'rupture');
+    // each vein shard bursts out of its own ore (enough to break it), then flies on
+    const power = TILES[tile].hp * this.hpScale(y) * 1.05;
+    const per = 1 + Math.floor(this.stats.shardBonus / 3);
+    for (const [hx, hy] of hits) this.spawnShards(hx * TILE + 8, hy * TILE + 8, 'vein', per, { power, exact: true, flat: true });
   }
 
   private checkFall(x: number, y: number) {
@@ -611,30 +641,83 @@ export class Sim {
     this.rocks.push({ id: this.id(), x: x * TILE + 8, y: y * TILE + 8, vy: 0 });
   }
 
-  burstShards(cx: number, cy: number, count: number, color: number, gen: number) {
-    const base = this.rng.range(0, Math.PI * 2);
-    for (let k = 0; k < count; k++) {
-      const a = base + (k / count) * Math.PI * 2 + this.rng.range(-0.2, 0.2);
-      const sp = this.rng.range(150, 210);
+  /**
+   * The one shard funnel. Every source (crystals, embers, cinnabar, geodes,
+   * veins, faults, Cataclysm, the Shard Bomb, dynamite, the Heart) throws its
+   * shards through here, so every global shard stat improves every type.
+   * Returns how many shards were actually thrown.
+   */
+  spawnShards(
+    cx: number, cy: number, id: ShardId, base: number,
+    o: { power?: number; gen?: number; angle?: number; spread?: number; exact?: boolean; burst?: boolean; flat?: boolean } = {},
+  ): number {
+    const type = SHARD_BY_ID[id];
+    const s = this.stats;
+    let count = o.exact ? base : base + s.shardBonus;
+    if (!o.exact && (o.burst ?? type.burstSource)) count *= 1 + s.burstBonus;
+    count = Math.round(count);
+    if (count <= 0) return 0;
+    const n = Math.max(0, Math.min(count, MAX_PER_BURST, MAX_ACTIVE_SHARDS - this.shards.length));
+    if (n === 0) return 0;
+    // past the caps, the extra shards' damage goes into the ones that fly
+    const overflow = count / n;
+    const depth = depthOfRow(Math.floor(cy / TILE));
+    let dmg = (o.power ?? BASE_SHARD_DAMAGE) * (s.shardDamage / BASE_SHARD_DAMAGE) * type.dmgMul * overflow;
+    if (!o.flat) dmg *= shardDepthScale(depth);
+    if (id === 'cinnabar') dmg *= s.cinnabarMul;
+    const full = (o.spread ?? Math.PI * 2) >= Math.PI * 2 - 1e-6;
+    const a0 = o.angle ?? this.rng.range(0, Math.PI * 2);
+    for (let k = 0; k < n; k++) {
+      const a = full ? a0 + (k / n) * Math.PI * 2 + this.rng.range(-0.2, 0.2) : a0 + ((n > 1 ? k / (n - 1) : 0.5) - 0.5) * o.spread! + this.rng.range(-0.1, 0.1);
+      const sp = this.rng.range(150, 210) * type.speedMul * s.shardSpeed;
       this.shards.push({
-        id: this.id(), x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.6, color,
-        dmg: this.stats.shardDamage * (1 + depthOfRow(Math.floor(cy / TILE)) / 250), bounces: this.stats.ricochet, gen,
+        id: this.id(), type: id, x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: type.life, dmg, color: type.color,
+        bounces: s.ricochet, pierce: type.pierce + s.shardPierce, burst: type.burst ? type.burst + s.emberSplit : 0, split: type.split,
+        seek: type.seek, gen: o.gen ?? 0,
       });
     }
-    this.emit({ t: 'shard', x: cx, y: cy });
+    this.shardSpawned[id] = (this.shardSpawned[id] ?? 0) + n;
+    this.emit({ t: 'shard', x: cx, y: cy, type: id, n });
+    if (s.supernova && n >= 6) this.supernova(cx, cy);
+    return n;
   }
 
-  explode(x: number, y: number, r: number, dmg: number) {
-    const tr = Math.ceil(r);
-    const tx = Math.floor(x / TILE);
-    const ty = Math.floor(y / TILE);
-    this.emit({ t: 'explode', x, y, r });
-    for (let dy = -tr; dy <= tr; dy++) {
-      for (let dx = -tr; dx <= tr; dx++) {
-        const d = Math.hypot(dx, dy);
-        if (d > r) continue;
-        this.damageTile(tx + dx, ty + dy, dmg * (1 - d / (r + 1) * 0.5), 'blast');
-      }
+  /** a cracked geode vault: geode shards and the crystal it was filled with */
+  private geodeVolley(cx: number, cy: number, depth: number, gen: number) {
+    const fill = TILES[biomeAt(depth).geodeFill];
+    this.spawnShards(cx, cy, 'geode', 3, { gen });
+    this.spawnShards(cx, cy, fill.shardType ?? 'glass', 3, { gen, power: fill.shardPower, burst: true });
+  }
+
+  /** Cataclysm: the chain itself erupts in a storm of shards around the Wick */
+  private cataclysmVolley() {
+    const p = this.player;
+    this.emit({ t: 'cataclysm', x: p.x, y: p.y });
+    this.spawnShards(p.x, p.y, 'cataclysm', 10, { power: BASE_SHARD_DAMAGE * 1.4 });
+    this.spawnShards(p.x, p.y, 'ember', 4, { power: 20 });
+  }
+
+  /** the Shard Bomb: a burst of glass shards that carries every shard upgrade */
+  fireShardBomb() {
+    const p = this.player;
+    const s = this.stats;
+    p.bombCd = Math.max(2, s.bombCooldown);
+    this.bombsUsed++;
+    this.emit({ t: 'shardBomb', x: p.x, y: p.y });
+    // the bomb counts every +shard twice: it is the player's own burst
+    this.spawnShards(p.x, p.y, 'glass', 8 + s.shardBonus, { power: BASE_SHARD_DAMAGE * 1.6, burst: true });
+  }
+
+  /** Supernova: a big burst shatters every crystal around it, in a quick ripple */
+  private supernova(cx: number, cy: number) {
+    const tx = Math.floor(cx / TILE);
+    const ty = Math.floor(cy / TILE);
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      if (dx * dx + dy * dy > 5) continue;
+      const def = TILES[this.tileAt(tx + dx, ty + dy)];
+      if (!def.shards || !CRYSTAL_SHARDS.has(def.shardType ?? 'glass')) continue;
+      if (this.breakQueue.some((b) => b.x === tx + dx && b.y === ty + dy)) continue;
+      this.breakQueue.push({ x: tx + dx, y: ty + dy, delay: 0.05 + Math.hypot(dx, dy) * 0.04 });
     }
   }
 
@@ -702,6 +785,11 @@ export class Sim {
     const def = BOON_BY_ID[id];
     if (!def || !this.choices) return;
     this.applyBoon(def, false);
+    // Boon Echo: sometimes a pick is taken twice
+    if (this.stats.boonEcho > 0 && (this.boons[def.id] ?? 0) < def.max && this.rng.chance(this.stats.boonEcho)) {
+      this.applyBoon(def, false);
+      this.emit({ t: 'boonEcho', id: def.id });
+    }
     this.choices = null;
     this.pendingLevels--;
   }
@@ -803,17 +891,7 @@ export class Sim {
       b.delay -= dt;
       if (b.delay <= 0) {
         this.breakQueue.splice(i, 1);
-        if (TILES[this.tileAt(b.x, b.y)].solid) this.breakTile(b.x, b.y, 'blast', 0);
-      }
-    }
-
-    // queued blasts
-    for (let i = this.blastQueue.length - 1; i >= 0; i--) {
-      const b = this.blastQueue[i];
-      b.delay -= dt;
-      if (b.delay <= 0) {
-        this.blastQueue.splice(i, 1);
-        this.explode(b.x, b.y, b.r, b.dmg);
+        if (TILES[this.tileAt(b.x, b.y)].solid) this.breakTile(b.x, b.y, 'wave', 0);
       }
     }
 
@@ -842,7 +920,7 @@ export class Sim {
     return {
       gold: Math.round(this.gold), gems: this.gems, cores: this.cores, depth: this.depth(), maxDepth: this.maxDepth,
       time: this.time, bestChain: this.bestChain, bestPot: Math.round(this.bestPot), level: this.level, boons,
-      flares: this.flares, lightPickups: this.lightPickups, ores: { ...this.ores }, relics: [...this.relicsFound],
+      bombs: this.bombsUsed, shardTypes: { ...this.shardSpawned }, lightPickups: this.lightPickups, ores: { ...this.ores }, relics: [...this.relicsFound],
       seals: this.sealsBroken, sealsBroken: [...this.sealsBrokenNow], geodes: this.geodesCracked, reachedHeart: this.reachedHeart, reason: this.endReason,
     };
   }
@@ -1038,8 +1116,8 @@ export class Sim {
     }
     if (p.plowCd > 0) p.plowCd -= dt;
 
-    if (p.flareCd > 0) p.flareCd -= dt;
-    if (inp.flare && p.flareCd <= 0) this.doFlare(false);
+    if (p.bombCd > 0) p.bombCd -= dt;
+    if (inp.shardBomb && p.bombCd <= 0) this.fireShardBomb();
     if (inp.bomb && p.dynamite > 0) {
       p.dynamite--;
       this.bombs.push({ id: this.id(), x: p.x, y: p.y - 4, vx: p.facing * 95 + p.vx * 0.5, vy: -150, fuse: 1.25 });
@@ -1070,88 +1148,105 @@ export class Sim {
     if (s.auger > 0) this.damageTile(tx + dx, ty + dy, dmg * s.auger, 'drill');
   }
 
-  doFlare(free: boolean) {
-    const p = this.player;
-    const s = this.stats;
-    if (!free) {
-      p.flareCd = s.flareCooldown;
-      this.flares++;
-    }
-    const r = s.flareRadius;
-    this.emit({ t: 'flare', x: p.x, y: p.y, r });
-    const tr = Math.ceil(r / TILE);
-    const tx = Math.floor(p.x / TILE);
-    const ty = Math.floor(p.y / TILE);
-    const depth = this.depth();
-    for (let dy = -tr; dy <= tr; dy++) {
-      for (let dx = -tr; dx <= tr; dx++) {
-        const d = Math.hypot(dx, dy) * TILE;
-        if (d > r) continue;
-        const x = tx + dx;
-        const y = ty + dy;
-        const def = TILES[this.tileAt(x, y)];
-        if (s.supernova && def.shards) {
-          this.damageTile(x, y, 1e9, 'flare');
-        } else {
-          this.damageTile(x, y, s.flareDamage * (1 + depth / 150) * (1 - d / r * 0.6), 'flare');
-        }
-      }
-    }
-    this.addLight(0.5, 'flare');
-  }
-
   // ---------------------------------------------------------------- shards
   private stepShards(dt: number) {
+    const born: Shard[] = [];
+    const child = (s: Shard, type: ShardId, a: number, speed: number, dmg: number, life: number, x: number, y: number): Shard => ({
+      ...s, id: this.id(), type, color: SHARD_BY_ID[type].color, x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, dmg, life,
+      burst: 0, split: false, seek: false, pierce: this.stats.shardPierce, gen: s.gen + 1,
+    });
     for (const s of this.shards) {
       s.life -= dt;
       if (s.life <= 0) continue;
+      if (s.seek) this.steer(s, dt);
       const steps = 3;
       for (let k = 0; k < steps && s.life > 0; k++) {
         const nx = s.x + (s.vx * dt) / steps;
         const ny = s.y + (s.vy * dt) / steps;
         const tx = Math.floor(nx / TILE);
         const ty = Math.floor(ny / TILE);
-        const tile = this.tileAt(tx, ty);
-        if (TILES[tile].solid) {
-          if (TILES[tile].unbreakable) {
-            if (s.bounces > 0) {
-              s.bounces--;
-              if (Math.floor(s.x / TILE) !== tx) s.vx = -s.vx;
-              else s.vy = -s.vy;
-              continue;
-            }
-            s.life = 0;
-            break;
-          }
-          const broke = this.damageTile(tx, ty, s.dmg, 'shard', s.gen + 1);
-          if (broke && this.stats.prismHeart && s.gen < 2) {
-            const a = Math.atan2(s.vy, s.vx);
-            for (const da of [-0.5, 0.5]) {
-              this.shards.push({ ...s, id: this.id(), x: tx * TILE + 8, y: ty * TILE + 8, vx: Math.cos(a + da) * 170, vy: Math.sin(a + da) * 170, life: 0.4, gen: s.gen + 1 });
-            }
-          }
-          s.life = 0;
-          break;
+        const def = TILES[this.tileAt(tx, ty)];
+        if (!def.solid) {
+          s.x = nx;
+          s.y = ny;
+          continue;
         }
-        s.x = nx;
-        s.y = ny;
+        const broke = !def.unbreakable && this.damageTile(tx, ty, s.dmg, 'shard', s.gen + 1, s.type);
+        const a = Math.atan2(s.vy, s.vx);
+        const hx = tx * TILE + 8;
+        const hy = ty * TILE + 8;
+        // first impact: embers blow apart into sparks, prisms (and lucky shards) split
+        if (s.burst > 0 && s.gen < 3) {
+          for (let j = 0; j < s.burst; j++) {
+            const ca = a + Math.PI + this.rng.range(-1.2, 1.2);
+            born.push(child(s, 'glass', ca, this.rng.range(140, 200) * this.stats.shardSpeed, s.dmg * 0.5, 0.35, s.x, s.y));
+          }
+          s.burst = 0;
+        }
+        const lucky = broke && (this.stats.prismHeart || (this.stats.shardSplit > 0 && this.rng.chance(this.stats.shardSplit)));
+        if ((s.split || lucky) && s.gen < 2) {
+          for (const da of [-0.5, 0.5]) born.push(child(s, s.type, a + da, 170 * this.stats.shardSpeed, s.dmg, 0.4, hx, hy));
+          s.split = false;
+        }
+        if (broke && s.pierce > 0) {
+          s.pierce--;
+          s.x = nx;
+          s.y = ny;
+          continue;
+        }
+        if (!broke && s.bounces > 0) {
+          s.bounces--;
+          if (Math.floor(s.x / TILE) !== tx) s.vx = -s.vx;
+          else s.vy = -s.vy;
+          continue;
+        }
+        s.life = 0;
+        break;
       }
     }
     this.shards = this.shards.filter((s) => s.life > 0);
+    for (const b of born) if (this.shards.length < MAX_ACTIVE_SHARDS) this.shards.push(b);
+  }
+
+  /** a void shard bends toward the nearest ore or crystal within 3 tiles (a gentle, capped turn) */
+  private steer(s: Shard, dt: number) {
+    const tx = Math.floor(s.x / TILE);
+    const ty = Math.floor(s.y / TILE);
+    let best: [number, number] | null = null;
+    let bd = 1e9;
+    for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+      const t = this.tileAt(tx + dx, ty + dy);
+      if (!this.isValuable(t)) continue;
+      const d = dx * dx + dy * dy;
+      if (d < bd) {
+        bd = d;
+        best = [tx + dx, ty + dy];
+      }
+    }
+    if (!best) return;
+    const want = Math.atan2(best[1] * TILE + 8 - s.y, best[0] * TILE + 8 - s.x);
+    const cur = Math.atan2(s.vy, s.vx);
+    let d = want - cur;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    const turn = Math.max(-STEER_RATE * dt, Math.min(STEER_RATE * dt, d));
+    const sp = Math.hypot(s.vx, s.vy);
+    s.vx = Math.cos(cur + turn) * sp;
+    s.vy = Math.sin(cur + turn) * sp;
   }
 
   // --------------------------------------------------------------- pickups
   private stepPickups(dt: number) {
     const p = this.player;
-    const mag = this.stats.magnet;
     for (const pk of this.pickups) {
       if (pk.done) continue;
       pk.age += dt;
       const dx = p.x - pk.x;
       const dy = p.y - pk.y;
       const d = Math.hypot(dx, dy);
-      if (pk.age > 0.3 && (d < mag || pk.age > 6)) {
-        const pull = 520 + (pk.age > 6 ? 400 : 0);
+      // auto-collect: close pickups home in at once, everything else after a moment
+      if (pk.age > 0.3 && (d < AUTO_PULL || pk.age > AUTO_HOME)) {
+        const pull = 520 + (pk.age > AUTO_HOME ? 400 : 0);
         pk.vx += (dx / (d + 0.01)) * pull * dt;
         pk.vy += (dy / (d + 0.01)) * pull * dt;
         pk.vx *= 0.9;
@@ -1188,7 +1283,11 @@ export class Sim {
         b.vy *= -0.3;
         b.vx *= 0.7;
       } else b.y = ny;
-      if (b.fuse <= 0) this.explode(b.x, b.y, 2.6 + this.stats.blastRadius, 60 * this.stats.blastMul * (1 + this.depth() / 120));
+      if (b.fuse <= 0) {
+        // dynamite bursts into heavy cinnabar shards
+        this.emit({ t: 'dynamite', x: b.x, y: b.y });
+        this.spawnShards(b.x, b.y, 'cinnabar', 10, { power: 45 });
+      }
     }
     this.bombs = this.bombs.filter((b) => b.fuse > 0);
   }

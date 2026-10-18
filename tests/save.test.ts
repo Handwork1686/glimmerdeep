@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { newSave, parseSave, Save, SAVE_VERSION } from '../src/systems/save';
 import { bankRun } from '../src/systems/bank';
+import { checkAll, codexPct } from '../src/systems/achievements';
 import type { RunSummary } from '../src/core/sim';
 
 const run = (o: Partial<RunSummary> = {}): RunSummary => ({
   gold: 100, gems: 2, cores: 0, depth: 40, maxDepth: 60, time: 80, bestChain: 12, bestPot: 40, level: 4,
-  boons: { overcharge: 1 }, flares: 3, lightPickups: 2, ores: { copper: 9 }, relics: [], seals: 0, sealsBroken: [], geodes: 0, reachedHeart: false,
+  boons: { overcharge: 1 }, bombs: 3, shardTypes: { glass: 12, ember: 4 }, lightPickups: 2, ores: { copper: 9 }, relics: [], seals: 0, sealsBroken: [], geodes: 0, reachedHeart: false,
   reason: 'dark', ...o,
 });
 
@@ -114,6 +115,52 @@ describe('save', () => {
     expect(d.achievements).toEqual({ first_light: 1 });
     // standing in a seal band is not past it
     expect(parseSave(JSON.stringify({ ...v3, maxDepth: 301 })).data.sealsBroken).toEqual([]);
+  });
+  it('migrates v4 saves: flare and magnet nodes are refunded in full, the bomb keeps your keys', () => {
+    const v4 = {
+      version: 4, gold: 5, gems: 1, cores: 0, upgrades: { root: 1, flarecd: 2, flarep: 1, magnet: 1, magnet2: 1, bit: 3 },
+      sealsBroken: [300], maxDepth: 330, relics: ['acorn'], stats: { runs: 4, flares: 77 }, tips: { flare: true, move: true },
+      settings: { bindings: { flare: ['F'], left: ['J'] } }, achievements: { first_light: 1 },
+    };
+    const d = parseSave(JSON.stringify(v4)).data;
+    expect(d.version).toBe(SAVE_VERSION);
+    for (const id of ['flarecd', 'flarep', 'magnet', 'magnet2']) expect(d.upgrades[id]).toBeUndefined();
+    expect(d.upgrades.bit).toBe(3);
+    // list prices at removal (x3.5 economy): flarecd 20, 20*1.85; flarep 70; magnet 35; magnet2 4000 * tier 7 (+5 gems)
+    const gold = Math.round(20 * 3.5) + Math.round(20 * 1.85 * 3.5) + Math.round(70 * 3.5) + Math.round(35 * 3.5) + Math.round(4000 * 7 * 3.5);
+    expect(d.gold).toBe(5 + gold);
+    expect(d.gems).toBe(1 + 5);
+    expect(d.stats.bombs).toBe(77);
+    expect(d.settings.bindings.shardbomb).toEqual(['F']);
+    expect(d.settings.bindings.left).toEqual(['J']);
+    expect(d.tips.flare).toBeUndefined();
+    expect(d.tips.move).toBe(true);
+    expect(d.sealsBroken).toEqual([300]);
+    expect(d.relics).toEqual(['acorn']);
+    expect(d.achievements).toEqual({ first_light: 1 });
+    // a v3 save goes all the way through
+    const v3 = { version: 3, maxDepth: 600, stop: 'grotto', upgrades: { root: 1, magnet: 2 }, stats: { flares: 3 } };
+    const e = parseSave(JSON.stringify(v3)).data;
+    expect(e.sealsBroken).toEqual([300, 520]);
+    expect(e.upgrades.magnet).toBeUndefined();
+    expect(e.gold).toBe(Math.round(35 * 3.5) + Math.round(35 * 1.85 * 3.5));
+    expect(e.stats.bombs).toBe(3);
+  });
+  it('the Codex counts ores, shard types and relics (57 in all), and never takes an achievement back', () => {
+    const s = newSave();
+    expect(codexPct(s)).toBe(0);
+    s.codex.shard_glass = 4;
+    expect(codexPct(s)).toBeCloseTo(1 / 57);
+    s.codex.copper = 3;
+    s.relics = ['acorn'];
+    expect(codexPct(s)).toBeCloseTo(3 / 57);
+    // an old save that had earned Field Notes keeps it, even though the Codex grew
+    s.achievements.codex50 = 1;
+    const was = Save.data;
+    Save.data = s;
+    checkAll();
+    Save.data = was;
+    expect(s.achievements.codex50).toBe(1);
   });
   it('migrates v1 saves', () => {
     const v1 = { version: 1, gold: 50, upgrades: { root: 1, oil: 2 }, settings: { master: 0.5 }, stats: { runs: 3 } };

@@ -10,14 +10,14 @@ const PAD: Record<Action, number[]> = {
   right: [15],
   up: [12, 0],
   down: [13],
-  flare: [2, 5],
+  shardbomb: [2, 5],
   bomb: [3, 4],
   pause: [9],
   confirm: [0],
   back: [1],
 };
 
-const ACTIONS: Action[] = ['left', 'right', 'up', 'down', 'flare', 'bomb', 'pause', 'confirm', 'back'];
+const ACTIONS: Action[] = ['left', 'right', 'up', 'down', 'shardbomb', 'bomb', 'pause', 'confirm', 'back'];
 
 class ControlsImpl {
   private held = new Set<Action>();
@@ -102,7 +102,7 @@ class ControlsImpl {
   /** Human-readable label of the first binding for prompts. */
   label(a: Action): string {
     if (this.lastDevice === 'pad') {
-      return ({ left: 'D-pad', right: 'D-pad', up: 'A', down: 'Down', flare: 'X', bomb: 'Y', pause: 'Start', confirm: 'A', back: 'B' } as Record<Action, string>)[a];
+      return ({ left: 'D-pad', right: 'D-pad', up: 'A', down: 'Down', shardbomb: 'X', bomb: 'Y', pause: 'Start', confirm: 'A', back: 'B' } as Record<Action, string>)[a];
     }
     const k = Save.data.settings.bindings[a]?.[0] ?? '?';
     return k.length === 1 ? k : k.charAt(0) + k.slice(1).toLowerCase();
