@@ -82,7 +82,7 @@ export const BRANCH_HINT: Record<Branch, string> = {
 export const UPGRADES: UpgradeNode[] = [
   n({ id: 'root', branch: 'core', name: 'The Wick', desc: 'Your lantern-pod. Every path starts here.', icon: 'lantern', max: 1, pos: [0, 0], requires: [], base: { gold: 0 }, apply: () => {} }),
   // repeatable late-game refinements (gold sinks)
-  n({ id: 'refine_bit', branch: 'core', name: 'Refine the Bit', desc: '+4% drill power and +3% shard damage. Repeatable.', icon: 'drill', max: 999, infinite: true, pos: [1, 0], at: [between(0), 1.45], requires: ['root'], base: { gold: 400000 }, growth: 1.35, apply: (s, l) => { s.drillPower *= 1 + 0.04 * l; s.shardDamage *= 1 + 0.03 * l; } }),
+  n({ id: 'refine_bit', branch: 'core', name: 'Refine the Bit', desc: '+4% drill power and +3% shard damage. Repeatable.', icon: 'drill', max: 999, infinite: true, pos: [1, 0], at: [between(0), 1.45], requires: ['root'], base: { gold: 400000 }, growth: 1.28, apply: (s, l) => { s.drillPower *= 1 + 0.04 * l; s.shardDamage *= 1 + 0.03 * l; } }),
   n({ id: 'refine_wick', branch: 'core', name: 'Refine the Wick', desc: '+3% lantern fuel. Repeatable.', icon: 'lantern', max: 999, infinite: true, pos: [1, 0], at: [between(6), 1.45], requires: ['root'], base: { gold: 25000 }, growth: 1.22, apply: (s, l) => { s.maxLight *= 1 + 0.03 * l; } }),
   n({ id: 'refine_purse', branch: 'core', name: 'Refine the Purse', desc: '+4% gold. Repeatable.', icon: 'coin', max: 999, infinite: true, pos: [1, 0], at: [between(3), 1.45], requires: ['root'], base: { gold: 25000 }, growth: 1.22, apply: (s, l) => { s.goldMul *= 1 + 0.04 * l; } }),
   n({ id: 'refine_chain', branch: 'core', name: 'Refine the Pot', desc: 'Chain pots grow 4% faster. Repeatable.', icon: 'chain', max: 999, infinite: true, pos: [1, 0], at: [between(2), 1.45], requires: ['root'], base: { gold: 30000 }, growth: 1.22, apply: (s, l) => { s.chainPot *= 1 + 0.04 * l; } }),
@@ -93,7 +93,7 @@ export const UPGRADES: UpgradeNode[] = [
   n({ id: 'steady', branch: 'light', name: 'Steady Flame', desc: 'Fuel drains 5% slower.', icon: 'drain', max: 5, pos: [2, -1], requires: ['oil'], base: { gold: 30 }, growth: 1.9, apply: (s, l) => { s.lightDrain *= Math.pow(0.95, l); } }),
   n({ id: 'lens', branch: 'light', name: 'Wide Glass', desc: '+12% light radius.', icon: 'radius', max: 3, pos: [2, 1], requires: ['oil'], base: { gold: 40 }, apply: (s, l) => { s.lightRadius += 0.12 * l; } }),
   n({ id: 'mosslore', branch: 'light', name: 'Moss Lore', desc: 'Lamp moss restores 50% more fuel.', icon: 'plus', max: 3, pos: [3, -2], requires: ['steady'], base: { gold: 70 }, apply: (s, l) => { s.mossMul += 0.5 * l; } }),
-  n({ id: 'reserve', branch: 'light', name: 'Reserve Tank', desc: '+15 lantern fuel.', icon: 'lantern', max: 3, pos: [3, 0], requires: ['steady', 'lens'], base: { gold: 260, gems: 2 }, apply: (s, l) => { s.maxLight += 15 * l; } }),
+  n({ id: 'reserve', branch: 'light', name: 'Reserve Tank', desc: '+15 lantern fuel, and every 100 max fuel makes ore worth 3% more (a lantern that keeps you down pays).', icon: 'lantern', max: 3, pos: [3, 0], requires: ['steady', 'lens'], base: { gold: 260, gems: 2 }, apply: (s, l) => { s.maxLight += 15 * l; s.lanternGold += 0.03 * l; } }),
   n({ id: 'recycler', branch: 'light', name: 'Fuel Recycler', desc: 'Chain links refuel 50% more.', icon: 'chain', max: 3, pos: [3, 2], requires: ['lens'], base: { gold: 120 }, apply: (s, l) => { s.chainFuel *= 1 + 0.5 * l; } }),
   n({ id: 'amberinf', branch: 'light', name: 'Amber Infusion', desc: 'Amber restores 50% more fuel.', icon: 'plus', max: 2, pos: [4, -2], requires: ['mosslore'], base: { gold: 600 }, apply: (s, l) => { s.amberMul += 0.5 * l; } }),
   n({ id: 'kindling', branch: 'light', name: 'Kindling', desc: 'Every ore you mine restores 0.08 fuel (less in the deep).', icon: 'plus', max: 3, pos: [4, 0], requires: ['reserve'], base: { gold: 900, gems: 4 }, apply: (s, l) => { s.kindling += 0.08 * l; } }),
@@ -140,7 +140,7 @@ export const UPGRADES: UpgradeNode[] = [
   n({ id: 'cataclysm', branch: 'shatter', name: 'Cataclysm', desc: 'Every 20 chain links the chain erupts in a storm of Cataclysm shards. The Shard Bomb recharges 3 s faster.', icon: 'shard', max: 1, pos: [5, 1], requires: ['ricochet', 'resonance'], base: { gold: 9000, cores: 1 }, capstone: true, apply: (s, l) => { if (l) { s.cataclysm = true; s.cataclysmEvery = 20; s.bombCooldown -= 3; } } }),
 
   // --------------------------------------------------------------- FORTUNE
-  n({ id: 'appraise', branch: 'fortune', name: 'Appraisal', desc: '+10% gold.', icon: 'coin', max: 5, pos: [1, 0], requires: ['root'], base: { gold: 15 }, apply: (s, l) => { s.goldMul += 0.1 * l; } }),
+  n({ id: 'appraise', branch: 'fortune', name: 'Appraisal', desc: '+15% gold.', icon: 'coin', max: 5, pos: [1, 0], requires: ['root'], base: { gold: 12 }, apply: (s, l) => { s.goldMul += 0.15 * l; } }),
   n({ id: 'lucky', branch: 'fortune', name: 'Lucky Strike', desc: '4% chance ore drops double.', icon: 'star', max: 5, pos: [2, -1], requires: ['appraise'], base: { gold: 50 }, apply: (s, l) => { s.doubleOre += 0.04 * l; } }),
   n({ id: 'assay', branch: 'fortune', name: 'Assay', desc: '+15% experience.', icon: 'eye', max: 4, pos: [2, 1], requires: ['appraise'], base: { gold: 45 }, apply: (s, l) => { s.xpMul += 0.15 * l; } }),
   n({ id: 'gemsense', branch: 'fortune', name: 'Gem Sense', desc: 'Ore has a 2% chance to drop a gem.', icon: 'gem', max: 4, pos: [3, 0], requires: ['lucky', 'assay'], base: { gold: 400 }, apply: (s, l) => { s.gemChance += 0.02 * l; } }),
@@ -159,7 +159,7 @@ export const UPGRADES: UpgradeNode[] = [
   n({ id: 'dynamite', branch: 'arcana', name: 'Cinnabar Charges', desc: 'Carry 2 sticks of dynamite (Q) that burst into cinnabar shards. +1 per extra level.', icon: 'bomb', max: 4, pos: [3, -2], requires: ['echoes'], base: { gold: 300, gems: 2 }, apply: (s, l) => { if (l) s.dynamite += 1 + l; } }),
   n({ id: 'headstart', branch: 'arcana', name: 'Head Start', desc: 'Begin each run with a random boon.', icon: 'star', max: 2, pos: [3, 2], requires: ['shrapnel'], base: { gold: 700, gems: 3 }, apply: (s, l) => { s.headStart += l; } }),
   n({ id: 'drone', branch: 'arcana', name: 'Scout Drone', desc: 'A drone orbits you and mines nearby rock.', icon: 'drone', max: 2, pos: [4, -1], requires: ['dynamite', 'reroll'], base: { gold: 2000, gems: 5 }, apply: (s, l) => { s.drones += l; } }),
-  n({ id: 'luck', branch: 'arcana', name: 'Lucky Stars', desc: 'Rare and mythic boons appear more often.', icon: 'star', max: 3, pos: [4, 1], requires: ['reroll', 'headstart'], base: { gold: 1600, gems: 3 }, apply: (s, l) => { s.luck += l; } }),
+  n({ id: 'luck', branch: 'arcana', name: 'Lucky Stars', desc: 'Rare and mythic boons appear more often, and each boon you hold this dig makes ore worth 1% more.', icon: 'star', max: 3, pos: [4, 1], requires: ['reroll', 'headstart'], base: { gold: 1600, gems: 3 }, apply: (s, l) => { s.luck += l; s.boonGold += 0.01 * l; } }),
   n({ id: 'banish', branch: 'arcana', name: 'Banish', desc: '+1 banish each run: remove a boon from the pool.', icon: 'skull', max: 2, pos: [5, -2], requires: ['drone'], base: { gold: 5000, gems: 4 }, apply: (s, l) => { s.banishes += l; } }),
   n({ id: 'insight', branch: 'arcana', name: 'Insight', desc: 'Choose from 4 boons instead of 3.', icon: 'eye', max: 1, pos: [5, 0], requires: ['drone', 'luck'], base: { gold: 8000, cores: 1 }, apply: (s, l) => { s.boonChoices += l; } }),
   n({ id: 'astral', branch: 'arcana', name: 'Astral Lantern', desc: 'Every level-up hand shows one more boon, you get a free reroll each dig, and levelling up restores 10 fuel.', icon: 'lantern', max: 1, pos: [5, 2], requires: ['luck'], base: { gold: 7000, cores: 1 }, capstone: true, apply: (s, l) => { if (l) { s.astral += 10; s.boonChoices += 1; s.rerolls += 1; } } }),
@@ -178,7 +178,7 @@ export const UPGRADES: UpgradeNode[] = [
 
 export const UPGRADE_BY_ID: Record<string, UpgradeNode> = Object.fromEntries(UPGRADES.map((u) => [u.id, u]));
 
-const TIER_MUL = [1, 1, 1, 1.4, 5, 16];
+const TIER_MUL = [1, 1, 1, 1.4, 6, 24];
 /** global price scale: peaceful digs last longer and mine more than the old fights allowed */
 export const ECON = 6;
 

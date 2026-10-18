@@ -68,7 +68,7 @@ export class Bot {
       gy = this.goal.y;
     }
     const below = TILES[sim.tileAt(px, py + 1)];
-    const sealed = below.name === 'seal' && sim.stats.drillPower < sim.sealNeed(py + 1);
+    const sealed = below.name === 'seal' && sim.sealPower < sim.sealNeed(py + 1);
     if (below.unbreakable || sealed) {
       // mine sideways under a seal we cannot break yet
       gx = px + this.wander * 6;

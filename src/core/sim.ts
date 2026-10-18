@@ -231,6 +231,11 @@ export const DRAIN_FLOOR = 0.4;
 export const STALL_MAX = 1.5;
 
 export class Sim {
+  /**
+   * Drill power that counts against a Strata Seal: the drill you built (Workshop
+   * and relics). This dig's boons speed you up, but seals answer only to the bit.
+   */
+  sealPower = 0;
   /** the open world: generated chunk by chunk as the Wick goes */
   world: World;
   rng: Rng;
@@ -306,6 +311,7 @@ export class Sim {
     this.baseUpgrades = cfg.upgrades;
     this.relicsKnown = [...(cfg.relics ?? [])];
     this.stats = computeStats(cfg.upgrades, this.boons, this.relicsKnown);
+    this.sealPower = computeStats(cfg.upgrades, {}, this.relicsKnown).drillPower;
     this.heart = { ...HEART_POS };
     const sites = relicSites(cfg.seed, this.relicsKnown, this.prospect().relicSense);
     for (const r of sites) this.relicAt.set(tileKey(r.x, r.y), r.id);
@@ -411,6 +417,12 @@ export class Sim {
     return this.solidAt(Math.floor(px / TILE), Math.floor(py / TILE));
   }
 
+  /** the playstyle gold engines: a big lantern (Lanternkeeper) and a full hand of boons (Trickster) */
+  engineGold(): number {
+    const held = Object.values(this.boons).reduce((a, b) => a + b, 0);
+    return (1 + this.stats.lanternGold * (this.stats.maxLight / 100)) * (1 + this.stats.boonGold * held);
+  }
+
   /** fuel burned per second right now (depth, pressure, stall and Last Light included) */
   drainRate(): number {
     // drain reductions stack, but never below DRAIN_FLOOR: the deep always bites
@@ -465,7 +477,7 @@ export class Sim {
       // seals only yield to a strong enough drill
       const need = this.sealNeed(y);
       if (src !== 'drill' && src !== 'seismic') return false;
-      if (this.stats.drillPower < need) {
+      if (this.sealPower < need) {
         if (this.sealDenyT <= 0) {
           this.sealDenyT = 0.6;
           this.emit({ t: 'sealDeny', x: x * TILE + 8, y: y * TILE + 8, need, name: this.sealAt(y)?.name ?? '' });
@@ -512,7 +524,7 @@ export class Sim {
         count = 1;
       }
       if (this.stats.midas && (def.drop.kind === 'copper' || def.drop.kind === 'silver' || def.drop.kind === 'tin')) per *= 3;
-      const goldMul = this.stats.goldMul * this.valueScale(depth) * (1 + this.stats.deepPockets * depth / 100) * this.gloom.goldMul;
+      const goldMul = this.stats.goldMul * this.valueScale(depth) * (1 + this.stats.deepPockets * depth / 100) * this.gloom.goldMul * this.engineGold();
       for (let k = 0; k < count; k++) this.spawnPickup(def.drop.kind, cx, cy, { gold: per * goldMul });
       if (this.chain > 0) this.potGold += per * goldMul * count;
       this.ores[def.drop.kind] = (this.ores[def.drop.kind] ?? 0) + count;
@@ -605,6 +617,7 @@ export class Sim {
     this.relicsFound.push(id);
     this.relicsKnown.push(id);
     this.stats = computeStats(this.baseUpgrades, this.boons, this.relicsKnown);
+    this.sealPower = computeStats(this.baseUpgrades, {}, this.relicsKnown).drillPower;
     this.light = Math.min(this.light, this.stats.maxLight);
     this.emit({ t: 'relic', id, x: cx, y: cy });
   }
@@ -1116,7 +1129,7 @@ export class Sim {
       p.drillTarget = target2;
       const tx = target2.x;
       const ty = target2.y;
-      const sealLocked = def.name === 'seal' && s.drillPower < this.sealNeed(ty);
+      const sealLocked = def.name === 'seal' && this.sealPower < this.sealNeed(ty);
       if (def.unbreakable || sealLocked) {
         p.drillTimer += dt;
         p.heat = Math.max(0, p.heat - dt * 1.2);

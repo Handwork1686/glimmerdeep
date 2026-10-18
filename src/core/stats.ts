@@ -60,6 +60,8 @@ export interface Stats {
   surveyRange: number;
   midas: boolean;
   midasTouch: number; // chance rock drops a gold nugget
+  lanternGold: number; // gold bonus per 100 max fuel (Lanternkeeper's engine)
+  boonGold: number; // gold bonus per boon held this dig (Trickster's engine)
 
   bombCooldown: number; // Shard Bomb recharge (s)
   dynamite: number; // cinnabar charges per run
@@ -82,7 +84,7 @@ export function baseStats(): Stats {
     shardBonus: 0, shardDamage: 6, shardSpeed: 1, shardPierce: 0, shardSplit: 0, burstBonus: 0, faultChance: 0, veinRupture: 0,
     emberSplit: 0, cinnabarMul: 1, ricochet: 0,
     chainPot: 0.06, chainTime: 1.2, chainFuel: 0.06, resonance: 0, cataclysm: false, cataclysmEvery: 25, prismHeart: false, supernova: false,
-    goldMul: 1, doubleOre: 0, gemChance: 0, deepPockets: 0, costMul: 1, fossilBonus: 0, xpMul: 1, survey: 0, surveyRange: 0, midas: false, midasTouch: 0,
+    goldMul: 1, doubleOre: 0, gemChance: 0, deepPockets: 0, costMul: 1, fossilBonus: 0, xpMul: 1, survey: 0, surveyRange: 0, midas: false, midasTouch: 0, lanternGold: 0, boonGold: 0,
     bombCooldown: 10, dynamite: 0, boonEcho: 0, drones: 0, boonChoices: 3, rerolls: 0, banishes: 0, headStart: 0,
     luck: 0, prospect: { ...NO_PROSPECT },
   };

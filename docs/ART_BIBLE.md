@@ -68,7 +68,24 @@ There are 13 ramps of 5 steps each (65 colours). Each ramp runs from dark to lig
 - Icons are 12×12, sit on a 14×14 cell, and share an outline style.
 
 ## 8. Effects
-- Effects include: debris chips tinted by material, sparks, shards with additive trails, a 7-frame explosion, dust puffs, hit bursts and twinkles.
+- Effects include: debris chips tinted by material, sparks, shards with additive trails, a 7-frame explosion (dynamite only), dust puffs, hit bursts and twinkles.
+- **Shards** are the game's main event, so every shard type has its own silhouette (`shard_<type>` in `tools/art/sprites_misc.py`), never colour alone. They are greyscale tintables (white body, grey and dark-grey edges), point to the right, and are rotated to their flight direction and tinted with the type's palette colour at runtime (`src/data/shards.ts`). They stay small (3–7 px) so a 28-shard burst still reads at 480×270.
+
+  | Type | Silhouette | Tint |
+  |---|---|---|
+  | Glass | long thin needle | ice white `c8ecff` |
+  | Crystal | elongated diamond | teal `5fe0c4` |
+  | Ember | round head with a broken tail (a comet) | ember `ff9a73` |
+  | Cinnabar | chunky block with a point | red `f0564a` |
+  | Geode | small hexagon | violet `b862de` |
+  | Vein | zigzag | amber `f7b740` |
+  | Fault | jagged solid wedge | earth `a3673f` |
+  | Cataclysm | four-point star | gold `ffd877` |
+  | Void | crescent | deep violet `8034a6` |
+  | Prism | hollow wedge | pale gold `fff0b5` |
+  | Rune | square ring | blue `72aef2` |
+- The Shard Bomb icon (`icon_shardbomb`) is a teal orb throwing white glints, and replaces the old flare icon.
+- **Rich ground** tints the backwall warm (`ffe2a0`) and scatters gold glints across the view.
 - Screen flashes are capped at 25–45% opacity and rate-limited to one per 350 ms. "Reduce flashes" turns them off.
 
 ## 9. Key art & store

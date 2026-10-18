@@ -133,8 +133,8 @@ export const SEALS: SealDef[] = [
   { depth: 300, power: 10, name: 'The Amber Seal' },
   { depth: 520, power: 22, name: 'The Glimmer Seal' },
   { depth: 760, power: 40, name: 'The Ember Seal' },
-  { depth: 1050, power: 110, name: 'The Hollow Seal' },
-  { depth: 1494, power: 188, name: 'The Mantle Seal' },
+  { depth: 1050, power: 90, name: 'The Hollow Seal' },
+  { depth: 1494, power: 150, name: 'The Mantle Seal' },
 ];
 export const SEAL_ROWS = 3;
 
