@@ -36,33 +36,35 @@ export interface ShardType {
   source: string;
   /** what it does (Codex) */
   desc: string;
+  /** one line shown the first time it flies */
+  hint: string;
 }
 
 const t = (o: ShardType) => o;
 
 export const SHARD_TYPES: ShardType[] = [
   t({ id: 'glass', name: 'Glass Shard', color: 0xc8ecff, dmgMul: 1, speedMul: 1.15, life: 0.75, pierce: 0, burst: 0, split: false, seek: false, burstSource: false,
-    source: 'Quartz, the Shard Bomb, ember sparks', desc: 'Fast and light, it flies far and breaks the first thing it meets.' }),
-  t({ id: 'crystal', name: 'Crystal Shard', color: 0x5fe0c4, dmgMul: 1, speedMul: 1, life: 0.65, pierce: 1, burst: 0, split: false, seek: false, burstSource: false,
-    source: 'Glimmer, opal, moonstone', desc: 'Breaks a tile and keeps going through to the next one.' }),
+    source: 'Quartz, the Shard Bomb, ember sparks', desc: 'Fast and light, it flies far and breaks the first thing it meets.', hint: 'Glass Shards are fast white streaks: one tile each, but far' }),
+  t({ id: 'crystal', name: 'Crystal Shard', color: 0x72aef2, dmgMul: 1, speedMul: 1, life: 0.65, pierce: 1, burst: 0, split: false, seek: false, burstSource: false,
+    source: 'Glimmer, opal, moonstone', desc: 'Breaks a tile and keeps going through to the next one.', hint: 'Crystal Shards are blue lines: they pierce through a tile and fly on' }),
   t({ id: 'ember', name: 'Ember Shard', color: 0xff9a73, dmgMul: 1, speedMul: 0.95, life: 0.5, pierce: 0, burst: 2, split: false, seek: false, burstSource: true,
-    source: 'Embers, fire opal', desc: 'Blows apart on impact into a spray of glass. Embers are the ones to blow up.' }),
+    source: 'Embers, fire opal', desc: 'Blows apart on impact into a spray of glass. Embers are the ones to blow up.', hint: 'Ember Shards split into sparks the moment they hit' }),
   t({ id: 'cinnabar', name: 'Cinnabar Shard', color: 0xf0564a, dmgMul: 1.6, speedMul: 0.7, life: 0.85, pierce: 0, burst: 0, split: false, seek: false, burstSource: true,
-    source: 'Cinnabar, dynamite', desc: 'Slow and heavy. A battering ram for hard rock.' }),
+    source: 'Cinnabar, dynamite', desc: 'Slow and heavy. A battering ram for hard rock.', hint: 'Cinnabar Shards are slow and heavy: they punch through hard rock' }),
   t({ id: 'geode', name: 'Geode Shard', color: 0xb862de, dmgMul: 1.2, speedMul: 1, life: 0.6, pierce: 0, burst: 0, split: false, seek: false, burstSource: true,
-    source: 'Geode vaults', desc: 'A cracked vault throws a volley of mixed shards before its loot.' }),
+    source: 'Geode vaults', desc: 'A cracked vault throws a volley of mixed shards before its loot.', hint: 'Geode Shards fly in a volley from a cracked vault' }),
   t({ id: 'vein', name: 'Vein Shard', color: 0xf7b740, dmgMul: 1, speedMul: 0.8, life: 0.35, pierce: 1, burst: 0, split: false, seek: false, burstSource: false,
-    source: 'Vein Rupture', desc: 'A ruptured vein lights up and tears itself apart from the inside.' }),
+    source: 'Vein Rupture', desc: 'A ruptured vein lights up and tears itself apart from the inside.', hint: 'Vein Shards tear a whole ore vein apart' }),
   t({ id: 'fault', name: 'Fault Shard', color: 0xa3673f, dmgMul: 0.9, speedMul: 1, life: 0.45, pierce: 0, burst: 0, split: false, seek: false, burstSource: false,
-    source: 'Fault Lines (plain rock)', desc: 'Even barren rock can crack open into shards.' }),
+    source: 'Faultstone, fault lines in plain rock', desc: 'Even barren rock can crack open into shards.', hint: 'Fault Shards crack grit out of plain rock' }),
   t({ id: 'cataclysm', name: 'Cataclysm Shard', color: 0xffd877, dmgMul: 1.4, speedMul: 1.2, life: 0.8, pierce: 1, burst: 0, split: false, seek: false, burstSource: true,
-    source: 'Long chains (Cataclysm)', desc: 'The chain itself erupts into a storm of shards.' }),
+    source: 'Long chains (Cataclysm)', desc: 'The chain itself erupts into a storm of shards.', hint: 'Cataclysm Shards: a long chain erupts in a storm' }),
   t({ id: 'void', name: 'Void Shard', color: 0x8034a6, dmgMul: 1.1, speedMul: 0.9, life: 0.95, pierce: 0, burst: 0, split: false, seek: true, burstSource: false,
-    source: 'Voidglass, aether', desc: 'Curves gently toward the nearest ore or crystal.' }),
+    source: 'Voidglass, aether', desc: 'Curves gently toward the nearest ore or crystal.', hint: 'Void Shards curve toward the nearest ore' }),
   t({ id: 'prism', name: 'Prism Shard', color: 0xfff0b5, dmgMul: 1, speedMul: 1, life: 0.6, pierce: 0, burst: 0, split: true, seek: false, burstSource: false,
-    source: 'Prism, heartstone, the Heart', desc: 'Splits in two the first time it hits something.' }),
-  t({ id: 'rune', name: 'Rune Shard', color: 0x72aef2, dmgMul: 1, speedMul: 1.1, life: 0.6, pierce: 0, burst: 0, split: false, seek: false, burstSource: false,
-    source: 'Strata Seal waves', desc: 'A breaking seal throws its runes into the rock around it.' }),
+    source: 'Prism, heartstone, the Heart', desc: 'Splits in two the first time it hits something. Deep in a chain it shatters the ore around it.', hint: 'Prism Shards split in two, and deep in a chain shatter nearby ore' }),
+  t({ id: 'rune', name: 'Rune Shard', color: 0x5fe0c4, dmgMul: 1, speedMul: 1.1, life: 0.6, pierce: 0, burst: 0, split: false, seek: false, burstSource: false,
+    source: 'Rune ribbons', desc: 'A breaking rune ribbon throws its runes into the rock around it.', hint: 'Rune Shards fly out of broken rune ribbons' }),
 ];
 
 export const SHARD_BY_ID = Object.fromEntries(SHARD_TYPES.map((s) => [s.id, s])) as Record<ShardId, ShardType>;

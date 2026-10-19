@@ -31,6 +31,7 @@ TILE_NAMES = [
     "brick", "turf",
     "tin", "jade", "opal", "emerald", "aether", "magmarock", "cinnabar", "moonstone", "mithril",
     "heartrock", "heartstone", "geode", "seal", "relic", "worldheart",
+    "faultstone",
 ]
 
 
@@ -816,6 +817,23 @@ def ore_cinnabar(host: Canvas) -> Canvas:
     return cv
 
 
+def ore_faultstone(host: Canvas) -> Canvas:
+    """Cracked rock: a jagged fissure with a glint of earth-brown light inside it."""
+    cv = host.copy()
+    for x0, y0, rng in cells(410):
+        x = x0 + rng.randint(3, 12)
+        for y in range(y0 + 1, y0 + 15):
+            cv.px(x - 1, y, "soil0")
+            cv.px(x, y, "void0")
+            cv.px(x + 1, y, "soil2" if (y + x) % 3 else "copper2")
+            if rng.random() < 0.35:
+                x += rng.choice((-1, 1))
+            x = max(x0 + 2, min(x0 + 13, x))
+        for _ in range(rng.randint(1, 2)):
+            cv.px(x0 + rng.randint(2, 13), y0 + rng.randint(2, 13), "copper4")
+    return cv
+
+
 def ore_moonstone(host: Canvas) -> Canvas:
     cv = host.copy()
     m = [c("blue1"), c("silver2"), c("blue3"), c("silver4"), c("light4")]
@@ -898,6 +916,7 @@ ORES = {
     "moonstone": ("magmarock", ore_moonstone),
     "mithril": ("magmarock", ore_mithril),
     "heartstone": ("heartrock", ore_heartstone),
+    "faultstone": ("stone", ore_faultstone),
 }
 
 

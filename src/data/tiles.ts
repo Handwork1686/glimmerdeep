@@ -13,6 +13,8 @@ export const TILE_NAMES = [
   // added for the dig to the World's Heart (append only: the tileset is indexed by order)
   'tin', 'jade', 'opal', 'emerald', 'aether', 'magmarock', 'cinnabar', 'moonstone', 'mithril',
   'heartrock', 'heartstone', 'geode', 'seal', 'relic', 'worldheart',
+  // cracked rock that throws fault shards (round 2)
+  'faultstone',
 ] as const;
 
 export type TileName = (typeof TILE_NAMES)[number];
@@ -90,7 +92,7 @@ export const TILES: TileDef[] = [
   d('obsidian', { hp: 260, xp: 2.5, tint: 0x4f1f6e }),
   d('fireopal', { hp: 120, ore: true, shards: 2, shardType: 'ember', shardPower: 22, drop: { kind: 'fireopal', count: 3, gold: 22 }, xp: 12, glow: { r: 1.2, color: 0xf0564a }, tint: 0xf0564a }),
   d('ruby', { hp: 130, ore: true, gems: 2, drop: { kind: 'ruby', count: 1, gold: 25 }, xp: 14, glow: { r: 1.0, color: 0xf0564a }, tint: 0xbd2d3a }),
-  d('ember', { hp: 40, shards: 6, shardType: 'ember', shardPower: 26, xp: 3, glow: { r: 1.8, color: 0xf0564a }, tint: 0xf0564a }),
+  d('ember', { hp: 24, shards: 6, shardType: 'ember', shardPower: 26, xp: 3, glow: { r: 1.8, color: 0xf0564a }, tint: 0xf0564a }),
   d('voidstone', { hp: 450, xp: 3, tint: 0x8034a6 }),
   d('starmetal', { hp: 500, ore: true, drop: { kind: 'starmetal', count: 4, gold: 45 }, xp: 22, glow: { r: 1.0, color: 0xe9acff }, tint: 0xd3dde8 }),
   d('prism', { hp: 420, ore: true, shards: 3, shardType: 'prism', shardPower: 40, gems: 3, drop: { kind: 'prism', count: 1, gold: 40 }, xp: 26, glow: { r: 1.3, color: 0xc4fff0 }, tint: 0xe9acff }),
@@ -112,6 +114,7 @@ export const TILES: TileDef[] = [
   d('seal', { hp: 60, xp: 30, glow: { r: 0.7, color: 0x5fe0c4 }, tint: 0x5fe0c4 }),
   d('relic', { hp: 20, xp: 25, glow: { r: 1.0, color: 0xfff0b5 }, tint: 0xfff0b5 }),
   d('worldheart', { hp: 9000, xp: 400, glow: { r: 4.0, color: 0xfffbea }, tint: 0xfffbea }),
+  d('faultstone', { hp: 16, shards: 4, shardType: 'fault', shardPower: 12, xp: 1.5, tint: 0xa3673f }),
 ];
 
 export const ITEM_GLOW: Partial<Record<ItemKind, number>> = {

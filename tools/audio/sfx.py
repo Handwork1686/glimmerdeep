@@ -206,6 +206,128 @@ def embershard(r):
     return drive(body + crackle, 1.6) * 0.7
 
 
+# ----------------------------------------------------------- shard voices
+# One short, distinct sound per shard type, so a burst can be told apart by ear.
+def shard_glass(r):
+    """Glass: a thin high ting."""
+    d = 0.14
+    ting = bell(2900 * r.uniform(0.97, 1.04), d, 2.0, 1.2, 0.05)
+    tick = hp(noise(0.01), 5000) * exp_decay(n_(0.01), 0.002) * 0.4
+    return mix(ting * 0.7, tick) * 0.8
+
+
+def shard_crystal(r):
+    """Crystal: a rising two-note ping that sings through the rock."""
+    out = np.zeros(n_(0.22))
+    a = sweep(1500, 2300, 0.1) * exp_decay(n_(0.1), 0.05)
+    b = sweep(2300, 3400, 0.14) * exp_decay(n_(0.14), 0.06)
+    out[: len(a)] += a * 0.5
+    out[n_(0.06):n_(0.06) + len(b)] += b * 0.5
+    return wet(out, 0.15, 0.6, 7000)
+
+
+def shard_ember(r):
+    """Ember: a warm pop that crackles apart."""
+    return embershard(r) * 0.9
+
+
+def shard_cinnabar(r):
+    """Cinnabar: a heavy thud with a stone crack on top."""
+    d = 0.3
+    thud = kick(0.28, 120, 38, 0.6) * 0.9
+    crack = bp(noise(d), 300, 1800) * exp_decay(n_(d), 0.04) * 0.5
+    return drive(mix(thud, crack), 1.6) * 0.8
+
+
+def shard_geode(r):
+    """Geode: a little cascade of marble clinks."""
+    out = np.zeros(n_(0.35))
+    for i, m in enumerate(("A5", "D6", "F#6", "A6")):
+        b = bell(midi_hz(note(m)), 0.2, 3.01, 1.0, 0.07) * 0.4
+        out[n_(0.035 * i):n_(0.035 * i) + len(b)] += b[: len(out) - n_(0.035 * i)]
+    return wet(out, 0.2, 0.7, 6500)
+
+
+def shard_vein(r):
+    """Vein: a ripping zig-zag, like a seam tearing."""
+    d = 0.2
+    f = 700 * (1 + 0.45 * np.sign(np.sin(np.linspace(0, 40, n_(d)))))
+    x = lp(osc("saw", f, d, 0.5), 3500) * exp_decay(n_(d), 0.07)
+    return drive(x * 0.7 + hp(noise(d), 3000) * exp_decay(n_(d), 0.03) * 0.2, 1.5) * 0.7
+
+
+def shard_fault(r):
+    """Fault: dry gravel, a grit of small cracks."""
+    d = 0.22
+    out = bp(noise(d), 250, 1500) * exp_decay(n_(d), 0.05) * 0.5
+    for _ in range(7):
+        i = r.integers(0, n_(0.16))
+        k = hp(noise(0.007), 2000) * r.uniform(0.25, 0.6) * exp_decay(n_(0.007), 0.002)
+        out[i:i + len(k)] += k[: len(out) - i]
+    return drive(out, 1.4) * 0.8
+
+
+def shard_cataclysm(r):
+    """Cataclysm: a swelling boom with a bright chord riding it."""
+    d = 0.6
+    boom = kick(0.5, 130, 36, 0.8) * 0.9
+    out = np.zeros(n_(d))
+    out[: len(boom)] += boom[: len(out)]
+    for i, m in enumerate(("C5", "G5", "C6", "E6")):
+        b = bell(midi_hz(note(m)), 0.5, 2.0, 1.0, 0.18) * 0.28
+        out[n_(0.03 * i):n_(0.03 * i) + len(b)] += b[: len(out) - n_(0.03 * i)]
+    return wet(out, 0.3, 1.0, 6500) * 0.85
+
+
+def shard_void(r):
+    """Void: a wobbling, falling tone that curves away."""
+    d = 0.28
+    n = n_(d)
+    vib = 1 + 0.05 * np.sin(np.linspace(0, 40, n))
+    f = np.linspace(1000, 360, n) * vib
+    x = osc("sine", f, d) * exp_decay(n, 0.1) * 0.7 + osc("tri", f * 0.5, d) * exp_decay(n, 0.08) * 0.25
+    return wet(x, 0.18, 0.8, 4500)
+
+
+def shard_prism(r):
+    """Prism: a shimmer that splits into two bright bells."""
+    out = np.zeros(n_(0.4))
+    for i, m in enumerate(("C7", "G6")):
+        b = bell(midi_hz(note(m)) * (1.003 if i else 1.0), 0.3, 2.01, 1.4, 0.1) * 0.4
+        out[n_(0.045 * i):n_(0.045 * i) + len(b)] += b[: len(out) - n_(0.045 * i)]
+    out += hp(noise(0.4), 6000) * exp_decay(n_(0.4), 0.06) * 0.15
+    return wet(out, 0.25, 0.9, 8000)
+
+
+def shard_rune(r):
+    """Rune: a soft, hollow chime."""
+    d = 0.4
+    x = bell(midi_hz(note("A5")), d, 2.0, 0.8, 0.2) * 0.5 + osc("sine", 220, d) * exp_decay(n_(d), 0.15) * 0.25
+    return wet(x, 0.25, 1.0, 5000)
+
+
+def surge(r):
+    """A Surge arms: a rising charge that locks in with a ping."""
+    d = 0.5
+    n = n_(d)
+    rise = sweep(260, 1500, 0.4, "saw", 1.6) * env(n_(0.4), 0.02, 0.1, 0.8, 0.15) * 0.3
+    out = np.zeros(n)
+    out[: len(rise)] += lp(rise, 4000)
+    ping = bell(midi_hz(note("E6")), 0.3, 2.0, 1.2, 0.12) * 0.6
+    out[n_(0.35):n_(0.35) + len(ping)] += ping[: n - n_(0.35)]
+    return wet(out, 0.2, 0.7, 7000)
+
+
+def nova(r):
+    """A Prism Nova: every crystal in reach rings at once."""
+    out = np.zeros(n_(0.8))
+    for i, m in enumerate(("C6", "E6", "G6", "C7", "E7", "G7")):
+        b = bell(midi_hz(note(m)), 0.5, 2.0, 1.1, 0.2) * 0.3
+        out[n_(0.03 * i):n_(0.03 * i) + len(b)] += b[: len(out) - n_(0.03 * i)]
+    out += hp(noise(0.8), 5000) * exp_decay(n_(0.8), 0.1) * 0.2
+    return wet(out, 0.35, 1.2, 8000)
+
+
 def throw(r):
     d = 0.2
     n = n_(d)
@@ -504,6 +626,9 @@ RECIPES = {
     "drill_rock": (drill_rock, 4), "drill_ore": (drill_ore, 3), "break_rock": (break_rock, 4), "break_ore": (break_ore, 3),
     "shatter": (shatter, 3), "crystal": (crystal, 3), "pickup": (pickup, 1), "light_pickup": (light_pickup, 1),
     "gem_pickup": (gem_pickup, 1), "core_pickup": (core_pickup, 1), "explode": (explode, 3), "shardbomb": (shardbomb, 2), "embershard": (embershard, 3),
+    "shard_glass": (shard_glass, 3), "shard_crystal": (shard_crystal, 2), "shard_ember": (shard_ember, 3), "shard_cinnabar": (shard_cinnabar, 2),
+    "shard_geode": (shard_geode, 2), "shard_vein": (shard_vein, 2), "shard_fault": (shard_fault, 3), "shard_cataclysm": (shard_cataclysm, 1),
+    "shard_void": (shard_void, 2), "shard_prism": (shard_prism, 2), "shard_rune": (shard_rune, 2), "surge": (surge, 1), "nova": (nova, 1),
     "throw": (throw, 2), "thrust_start": (thrust_start, 2), "land": (land, 2), "clank": (clank, 2),
     "levelup": (levelup, 1), "boon_pick": (boon_pick, 1), "reroll": (reroll, 1), "banish": (banish, 1),
     "chain_big": (chain_big, 2), "second_wind": (second_wind, 1), "achievement": (achievement, 1), "buy": (buy, 2),

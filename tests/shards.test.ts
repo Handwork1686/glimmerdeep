@@ -51,6 +51,23 @@ describe('the shard family', () => {
     expect(sig.size).toBeGreaterThanOrEqual(8);
   });
 
+  it('every type has its own colour, a one-line hint and its own voice', () => {
+    const colors = new Set(SHARD_TYPES.map((t) => t.color));
+    expect(colors.size).toBe(SHARD_TYPES.length);
+    const manifest = JSON.parse(fs.readFileSync('public/assets/audio/manifest.json', 'utf8'));
+    const hints = new Set<string>();
+    for (const t of SHARD_TYPES) {
+      expect(t.hint.length, t.id).toBeGreaterThan(15);
+      hints.add(t.hint);
+      expect(manifest.sfx[`shard_${t.id}`], `sfx shard_${t.id}`).toBeGreaterThan(0);
+      expect(fs.existsSync(`public/assets/audio/sfx/shard_${t.id}_0.ogg`)).toBe(true);
+    }
+    expect(hints.size).toBe(SHARD_TYPES.length);
+    // the crystal and rune tints are the two palette colours the brief swapped
+    expect(SHARD_TYPES.find((t) => t.id === 'crystal')!.color).toBe(0x72aef2);
+    expect(SHARD_TYPES.find((t) => t.id === 'rune')!.color).toBe(0x5fe0c4);
+  });
+
   it('embers and cinnabar are shard sources now, not explosions', () => {
     expect(TILES[T.ember].shards).toBeGreaterThan(0);
     expect(TILES[T.cinnabar].shardType).toBe('cinnabar');

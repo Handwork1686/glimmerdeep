@@ -74,6 +74,8 @@ export interface Shard {
   burst: number;
   /** splits in two on first impact (prism) */
   split: boolean;
+  /** a prism shard that may still shatter the ore around its first impact (children cannot) */
+  nova: boolean;
   /** curves toward ore and crystal (void) */
   seek: boolean;
   gen: number;
@@ -120,6 +122,10 @@ export type SimEvent =
   | { t: 'dynamite'; x: number; y: number }
   | { t: 'shardBomb'; x: number; y: number }
   | { t: 'cataclysm'; x: number; y: number }
+  | { t: 'cataclysmWarn'; x: number; y: number }
+  | { t: 'surgeArm' }
+  | { t: 'surgeFire'; x: number; y: number; dir: string; n: number }
+  | { t: 'nova'; x: number; y: number; n: number; tile: number }
   | { t: 'bombThrow' }
   | { t: 'levelup'; level: number }
   | { t: 'chainLink'; count: number }
@@ -218,6 +224,14 @@ export const THROUGHPUT_MAX = 1.4;
 export const IDLE_CHAIN_DECAY = 3;
 /** a tile a shard breaks this far from the Wick throws no further shards */
 export const SHARD_LEASH = 12 * TILE;
+/** links that arm a Surge, and the tiles it clears */
+export const SURGE_LINKS = 75;
+export const SURGE_LENGTH = 20;
+/** a Prism Nova needs a chain this long, and reaches this far (tiles) */
+export const NOVA_CHAIN = 50;
+export const NOVA_RADIUS = 5;
+/** the Cataclysm ring shows this long before the volley */
+export const CATACLYSM_WARN = 0.5;
 /** the most fuel shard breaks (Fuel Recycler, Shardlight) restore per second */
 export const SHARD_FUEL_CAP = 2;
 
@@ -302,7 +316,16 @@ export class Sim {
   private heartEndT = -1;
   private nextId = 1;
   /** tiles that shatter on a timer (seal waves, the heart, Supernova) */
-  private breakQueue: { x: number; y: number; delay: number }[] = [];
+  private breakQueue: { x: number; y: number; delay: number; src?: string }[] = [];
+  /** links counted toward the next Surge (clears do not count) */
+  surgeLinks = 0;
+  /** a Surge is armed and fires on the next drill break */
+  surgeArmed = false;
+  private surgeArmedAt = 0;
+  surgesFired = 0;
+  novasFired = 0;
+  /** seconds until a warned Cataclysm volley erupts (0 = none) */
+  private cataclysmT = 0;
   secondWindsUsed = 0;
   /** when the last tile broke (for the stall drain) */
   lastBreakT = 0;
@@ -508,14 +531,19 @@ export class Sim {
     // every cascade break is a link, and so is every drill break: the drill keeps the chain going
     const cascade = src === 'shard' || src === 'wave';
     const fromDrill = src === 'drill';
+    const fromClear = src === 'clear';
     const valuable = this.isValuable(tile) || tile === T.seal || tile === T.geode;
-    const linked = cascade || valuable || fromDrill;
+    const linked = cascade || valuable || fromDrill || fromClear;
     this.breaksBy[src] = (this.breaksBy[src] ?? 0) + 1;
-    if (linked) this.link(fromDrill);
+    if (linked) this.link(fromDrill, fromClear);
     const p = this.player;
     // a shard that breaks something far from the Wick sets nothing else off: the chain needs you nearby
-    const leashed = src === 'shard' && Math.hypot(x * TILE + 8 - p.x, y * TILE + 8 - p.y) > SHARD_LEASH;
-    if (fromDrill) this.drillBreak();
+    // (a board clear is the same: it pays out and links, but it never throws shards of its own)
+    const leashed = fromClear || (src === 'shard' && Math.hypot(x * TILE + 8 - p.x, y * TILE + 8 - p.y) > SHARD_LEASH);
+    if (fromDrill) {
+      this.drillBreak();
+      if (this.surgeArmed && this.drillBreaks > this.surgeArmedAt) this.fireSurge(x, y);
+    }
     if (src === 'shard') this.shardBreak(depthOfRow(y));
     this.emit({ t: 'tile', x, y });
     this.emit({ t: 'break', x, y, tile, src, chain: linked ? this.chain : 0 });
@@ -627,8 +655,16 @@ export class Sim {
     this.addLight(give, src);
   }
 
-  private link(fromDrill = false) {
+  private link(fromDrill = false, clear = false) {
     this.chain++;
+    // 75 fresh links arm a Surge (only one charge at a time; board clears never count)
+    if (!clear && !this.surgeArmed && ++this.surgeLinks >= SURGE_LINKS) {
+      this.surgeLinks = 0;
+      this.surgeArmed = true;
+      // it fires on the next drill break after this one
+      this.surgeArmedAt = this.drillBreaks + (fromDrill ? 1 : 0);
+      this.emit({ t: 'surgeArm' });
+    }
     // standing still, a chain cools off fast; every drill break buys a little extra time
     const base = this.stats.chainTime * (this.idle ? 1 / IDLE_CHAIN_DECAY : 1);
     this.chainTimer = fromDrill ? Math.min(this.stats.chainTime * 2, base + 0.25 + this.stats.chainKeeper) : base;
@@ -647,7 +683,7 @@ export class Sim {
       this.chainLinksForCataclysm++;
       if (this.chainLinksForCataclysm >= this.stats.cataclysmEvery) {
         this.chainLinksForCataclysm = 0;
-        this.cataclysmVolley();
+        this.warnCataclysm();
       }
     }
   }
@@ -785,7 +821,7 @@ export class Sim {
       this.shards.push({
         id: this.id(), type: id, x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: type.life, dmg, color: type.color,
         bounces: s.ricochet, pierce: type.pierce + s.shardPierce, burst: type.burst ? type.burst + s.emberSplit : 0, split: type.split,
-        seek: type.seek, gen: o.gen ?? 0,
+        seek: type.seek, gen: o.gen ?? 0, nova: id === 'prism',
       });
     }
     this.shardSpawned[id] = (this.shardSpawned[id] ?? 0) + n;
@@ -799,6 +835,62 @@ export class Sim {
     const fill = TILES[biomeAt(depth).geodeFill];
     this.spawnShards(cx, cy, 'geode', 3, { gen });
     this.spawnShards(cx, cy, fill.shardType ?? 'glass', 3, { gen, power: fill.shardPower, burst: true });
+  }
+
+  /** the chain is about to erupt: a ring warns first, the volley follows half a second later */
+  private warnCataclysm() {
+    if (this.cataclysmT > 0) return;
+    this.cataclysmT = CATACLYSM_WARN;
+    this.emit({ t: 'cataclysmWarn', x: this.player.x, y: this.player.y });
+  }
+
+  /** Surge: the next drill break clears a line of tiles in the direction the drill points */
+  private fireSurge(x: number, y: number) {
+    const dir = this.player.drill;
+    if (!dir) return;
+    this.surgeArmed = false;
+    this.surgesFired++;
+    const dx = dir === 'right' ? 1 : dir === 'left' ? -1 : 0;
+    const dy = dir === 'down' ? 1 : dir === 'up' ? -1 : 0;
+    let n = 0;
+    for (let k = 1; k <= SURGE_LENGTH; k++) {
+      const tx = x + dx * k;
+      const ty = y + dy * k;
+      const def = TILES[this.tileAt(tx, ty)];
+      if (!def.solid || def.unbreakable) continue;
+      if (this.tileAt(tx, ty) === T.worldheart) continue;
+      this.queueClear(tx, ty, 0.03 + k * 0.025);
+      n++;
+    }
+    this.emit({ t: 'surgeFire', x: x * TILE + 8, y: y * TILE + 8, dir, n });
+  }
+
+  private queueClear(x: number, y: number, delay: number) {
+    if (this.breakQueue.some((b) => b.x === x && b.y === y)) return;
+    this.breakQueue.push({ x, y, delay, src: 'clear' });
+  }
+
+  /** Prism Nova: a prism shard's first hit, deep in a chain, shatters the most common ore around it */
+  private prismNova(tx: number, ty: number) {
+    const counts = new Map<number, number>();
+    for (let dy = -NOVA_RADIUS; dy <= NOVA_RADIUS; dy++) for (let dx = -NOVA_RADIUS; dx <= NOVA_RADIUS; dx++) {
+      if (dx * dx + dy * dy > NOVA_RADIUS * NOVA_RADIUS) continue;
+      const t = this.tileAt(tx + dx, ty + dy);
+      if (TILES[t].ore && !TILES[t].unbreakable) counts.set(t, (counts.get(t) ?? 0) + 1);
+    }
+    let best = -1;
+    let bn = 0;
+    for (const [t, c] of counts) if (c > bn) {
+      best = t;
+      bn = c;
+    }
+    if (best < 0) return;
+    this.novasFired++;
+    for (let dy = -NOVA_RADIUS; dy <= NOVA_RADIUS; dy++) for (let dx = -NOVA_RADIUS; dx <= NOVA_RADIUS; dx++) {
+      if (dx * dx + dy * dy > NOVA_RADIUS * NOVA_RADIUS) continue;
+      if (this.tileAt(tx + dx, ty + dy) === best) this.queueClear(tx + dx, ty + dy, 0.04 + Math.hypot(dx, dy) * 0.045);
+    }
+    this.emit({ t: 'nova', x: tx * TILE + 8, y: ty * TILE + 8, n: bn, tile: best });
   }
 
   /** Cataclysm: the chain itself erupts in a storm of shards around the Wick */
@@ -1022,13 +1114,17 @@ export class Sim {
       if (!chewing) this.chainTimer -= dt * (this.idle ? IDLE_CHAIN_DECAY : 1);
       if (this.chainTimer <= 0) this.cashOut();
     }
-    // timed shatters (seal waves, the heart)
+    if (this.cataclysmT > 0) {
+      this.cataclysmT -= dt;
+      if (this.cataclysmT <= 0) this.cataclysmVolley();
+    }
+    // timed shatters (the heart, Supernova, board clears)
     for (let i = this.breakQueue.length - 1; i >= 0; i--) {
       const b = this.breakQueue[i];
       b.delay -= dt;
       if (b.delay <= 0) {
         this.breakQueue.splice(i, 1);
-        if (TILES[this.tileAt(b.x, b.y)].solid) this.breakTile(b.x, b.y, 'wave', 0);
+        if (TILES[this.tileAt(b.x, b.y)].solid) this.breakTile(b.x, b.y, b.src ?? 'wave', 0);
       }
     }
 
@@ -1290,7 +1386,7 @@ export class Sim {
     const born: Shard[] = [];
     const child = (s: Shard, type: ShardId, a: number, speed: number, dmg: number, life: number, x: number, y: number): Shard => ({
       ...s, id: this.id(), type, color: SHARD_BY_ID[type].color, x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, dmg, life,
-      burst: 0, split: false, seek: false, pierce: this.stats.shardPierce, gen: s.gen + 1,
+      burst: 0, split: false, nova: false, seek: false, pierce: this.stats.shardPierce, gen: s.gen + 1,
     });
     for (const s of this.shards) {
       s.life -= dt;
@@ -1319,6 +1415,10 @@ export class Sim {
             born.push(child(s, 'glass', ca, this.rng.range(140, 200) * this.stats.shardSpeed, s.dmg * 0.5, 0.35, s.x, s.y));
           }
           s.burst = 0;
+        }
+        if (s.nova) {
+          s.nova = false;
+          if (this.chain >= NOVA_CHAIN) this.prismNova(tx, ty);
         }
         const lucky = broke && (this.stats.prismHeart || (this.stats.shardSplit > 0 && this.rng.chance(this.stats.shardSplit)));
         if ((s.split || lucky) && s.gen < 2) {

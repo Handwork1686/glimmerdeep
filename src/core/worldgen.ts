@@ -54,6 +54,8 @@ export interface GenContext {
   relics: readonly RelicSpot[];
   /** biome ids whose four relics are all found: relic rolls there become caches */
   doneLayers: ReadonlySet<string>;
+  /** tests only: false skips the shard density floor, to see what it added */
+  floor?: boolean;
 }
 
 export interface Chunk {
@@ -206,6 +208,9 @@ export function generateChunk(cx: number, cy: number, p: Prospect, ctx: GenConte
     set(-1, SKY_ROWS + 5, T.quartz);
   }
 
+  // ---- 7. shard density floor: no layer is ever shard-starved, whatever the World nodes
+  if (ctx.floor !== false) shardFloor(seed, cx, cy, tiles, x0, y0);
+
   const natural = new Uint8Array(CHUNK * CHUNK);
   for (let i = 0; i < tiles.length; i++) natural[i] = tiles[i] === T.air ? 1 : 0;
   return { tiles, natural, rich: isRich(seed, cx, cy, p) };
@@ -218,6 +223,62 @@ export function ribbonGap(seed: number, depth: number, x: number): boolean {
   const len = hash2(k, depth, seed + 89) < 0.5 ? 1 : 2;
   const r = x - k * 6 - off;
   return r >= 0 && r < len;
+}
+
+/** what each layer's floor sources are made of: [tile, weight] */
+const FLOOR_MIX: Record<string, [number, number][]> = {
+  rootsoil: [[T.quartz, 0.85], [T.ember, 0.15]],
+  amberstone: [[T.quartz, 0.5], [T.faultstone, 0.3], [T.ember, 0.2]],
+  grotto: [[T.glimmer, 0.35], [T.opal, 0.2], [T.quartz, 0.2], [T.faultstone, 0.25]],
+  emberdeep: [[T.ember, 0.4], [T.fireopal, 0.25], [T.faultstone, 0.2], [T.cinnabar, 0.1], [T.quartz, 0.05]],
+  hollow: [[T.voidglass, 0.4], [T.aether, 0.15], [T.prism, 0.1], [T.faultstone, 0.2], [T.quartz, 0.15]],
+  mantle: [[T.moonstone, 0.35], [T.cinnabar, 0.25], [T.heartstone, 0.1], [T.faultstone, 0.2], [T.quartz, 0.1]],
+  heart: [[T.heartstone, 0.2], [T.prism, 0.2], [T.aether, 0.2], [T.moonstone, 0.2], [T.cinnabar, 0.1], [T.faultstone, 0.1]],
+};
+/** the plain rock every layer is made of: the only thing a floor source may replace */
+export const PLAIN_ROCK = new Set<number>(BIOMES.flatMap((b) => b.base.map(([t]) => t)));
+const isShardSource = (t: number) => !!TILES[t].shards;
+
+/**
+ * Every 8-row group of a chunk (32 tiles wide) that holds no shard source gets
+ * one, drawn from its layer's mix, in place of a piece of plain rock. Ore, relics,
+ * rune ribbons, geodes, air and the Heart chamber are never touched.
+ */
+export function shardFloor(seed: number, cx: number, cy: number, tiles: Uint8Array, x0: number, y0: number) {
+  const hTop = rowOfDepth(HEART_DEPTH);
+  for (let g = 0; g < CHUNK / 8; g++) {
+    const gy = y0 + g * 8;
+    if (gy < SKY_ROWS + 8) continue;
+    let has = false;
+    for (let ly = 0; ly < 8 && !has; ly++) for (let lx = 0; lx < CHUNK; lx++) if (isShardSource(tiles[(g * 8 + ly) * CHUNK + lx])) {
+      has = true;
+      break;
+    }
+    if (has) continue;
+    // a hashed spot, then the nearest plain rock to it (up to 40 tries)
+    for (let k = 0; k < 40; k++) {
+      const lx = Math.floor(hash2(cx * 8 + g, cy + k, seed + 700) * CHUNK);
+      const ly = g * 8 + Math.floor(hash2(cx * 8 + g, cy + k, seed + 701) * 8);
+      const x = x0 + lx;
+      const y = y0 + ly;
+      const i = ly * CHUNK + lx;
+      if (!PLAIN_ROCK.has(tiles[i])) continue;
+      // keep clear of the Heart chamber
+      if (y >= hTop - 2 && y <= hTop + HEART_CHAMBER + 2 && Math.abs(x) < 16) continue;
+      const mix = FLOOR_MIX[cellBiome(seed, x, y).id];
+      let r = hash2(x, y, seed + 702) * mix.reduce((a, [, w]) => a + w, 0);
+      let pick = mix[0][0];
+      for (const [t, w] of mix) {
+        r -= w;
+        if (r <= 0) {
+          pick = t;
+          break;
+        }
+      }
+      tiles[i] = pick;
+      break;
+    }
+  }
 }
 
 const GEM_FOR: Record<string, number> = {

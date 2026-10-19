@@ -44,7 +44,20 @@
   "heart_break": 1,
   "drill_loop": 1,
   "shardbomb": 2,
-  "embershard": 3
+  "embershard": 3,
+  "shard_glass": 3,
+  "shard_crystal": 2,
+  "shard_ember": 3,
+  "shard_cinnabar": 2,
+  "shard_geode": 2,
+  "shard_vein": 2,
+  "shard_fault": 3,
+  "shard_cataclysm": 1,
+  "shard_void": 2,
+  "shard_prism": 2,
+  "shard_rune": 2,
+  "surge": 1,
+  "nova": 1
  },
  "music": {
   "title": {

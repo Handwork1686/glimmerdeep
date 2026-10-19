@@ -54,6 +54,10 @@ export class RunScene extends Phaser.Scene {
   private sparks!: Phaser.GameObjects.Particles.ParticleEmitter;
   private embers!: Phaser.GameObjects.Particles.ParticleEmitter;
   private coins!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private trail!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private smoke!: Phaser.GameObjects.Particles.ParticleEmitter;
+  /** last time each shard type's voice played (ms) */
+  private shardSnd: Record<string, number> = {};
   private lastGeode = 0;
   private ambient: Record<string, Phaser.GameObjects.Particles.ParticleEmitter> = {};
   private far!: Phaser.GameObjects.TileSprite;
@@ -183,6 +187,13 @@ export class RunScene extends Phaser.Scene {
       frame: ['item_gold', 'item_copper', 'spark'], lifespan: { min: 500, max: 1000 }, speed: { min: 60, max: 190 },
       angle: { min: 220, max: 320 }, gravityY: 480, rotate: { min: -180, max: 180 }, scale: { start: 1, end: 0.6 }, emitting: false,
     }).setDepth(12);
+    // shard trails: a fading line that stays behind a shard, and a puff of smoke for the heavy ones
+    this.trail = this.add.particles(0, 0, 'atlas', {
+      frame: 'pixel', lifespan: 260, scale: { start: 1.5, end: 0 }, alpha: { start: 0.9, end: 0 }, emitting: false, blendMode: Phaser.BlendModes.ADD,
+    }).setDepth(10);
+    this.smoke = this.add.particles(0, 0, 'atlas', {
+      frame: 'dot2', lifespan: { min: 380, max: 560 }, speed: { min: 4, max: 22 }, scale: { start: 1.8, end: 0.4 }, alpha: { start: 0.5, end: 0 }, emitting: false,
+    }).setDepth(10);
     // biome atmosphere: dust, golden motes, glitter, rising embers, void wisps
     const amb: Record<string, Phaser.Types.GameObjects.Particles.ParticleEmitterConfig> = {
       rootsoil: { frame: 'pixel', speedX: { min: -3, max: 3 }, speedY: { min: 2, max: 7 }, tint: 0xa3673f, lifespan: 5000, frequency: 220 },
@@ -481,13 +492,14 @@ export class RunScene extends Phaser.Scene {
           this.sparks.setParticleTint(SHARD_BY_ID[e.type].color);
           this.sparks.explode(Math.min(14, e.n), e.x, e.y);
         }
-        if (e.type === 'ember' || e.type === 'cinnabar') {
-          this.embers.explode(Math.min(10, e.n * 2), e.x, e.y);
-          if (this.burstSoundT <= 0) {
-            Audio.play('embershard', { volume: 0.55, jitter: 0.1, pan: pan(e.x) });
-            this.burstSoundT = 0.07;
-          }
+        if (e.type === 'ember' || e.type === 'cinnabar') this.embers.explode(Math.min(10, e.n * 2), e.x, e.y);
+        // every kind of shard has its own voice (a burst of one kind is one sound, not a wall of them)
+        if (this.time.now - (this.shardSnd[e.type] ?? 0) > 110) {
+          this.shardSnd[e.type] = this.time.now;
+          Audio.play(`shard_${e.type}`, { volume: e.type === 'glass' ? 0.5 : 0.65, jitter: 0.08, pan: pan(e.x) });
         }
+        // heavy shards leave with a thump
+        if (e.type === 'cinnabar' && e.n >= 3) this.shake(120, 0.003);
         if (e.n >= 10) this.shake(90, 0.0025);
         break;
       }
@@ -502,6 +514,37 @@ export class RunScene extends Phaser.Scene {
         this.shake(260, 0.006);
         this.hitstop = Math.max(this.hitstop, 0.05);
         Audio.play('shardbomb', { volume: 1, rate: 0.8 });
+        break;
+      }
+      case 'cataclysmWarn': {
+        // the ring closes in on the Wick: the volley comes when it arrives
+        const ring = this.add.circle(e.x, e.y, 80).setStrokeStyle(2, 0xffd877).setDepth(11).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: ring, radius: 8, alpha: 0.9, duration: 480, ease: 'Cubic.easeIn', onUpdate: () => ring.setRadius(ring.radius), onComplete: () => ring.destroy() });
+        Audio.play('surge', { volume: 0.7, rate: 0.7 });
+        break;
+      }
+      case 'surgeArm':
+        this.popup('SURGE!', sim.player.x, sim.player.y - 22, 0xffd877);
+        this.flash(0xffd877, 160, 0.2);
+        Audio.play('surge', { volume: 0.9 });
+        break;
+      case 'surgeFire': {
+        const horiz = e.dir === 'left' || e.dir === 'right';
+        const sign = e.dir === 'left' || e.dir === 'up' ? -1 : 1;
+        const beam = this.add.rectangle(e.x + (horiz ? sign * 160 : 0), e.y + (horiz ? 0 : sign * 160), horiz ? 320 : 4, horiz ? 4 : 320, 0xfff0b5).setDepth(11).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: beam, alpha: 0, scaleY: horiz ? 3 : 1, scaleX: horiz ? 1 : 3, duration: 260, onComplete: () => beam.destroy() });
+        this.shake(200, 0.005);
+        this.hitstop = Math.max(this.hitstop, 0.04);
+        Audio.play('shardbomb', { volume: 0.9, rate: 1.2 });
+        break;
+      }
+      case 'nova': {
+        const ring = this.add.circle(e.x, e.y, 8).setStrokeStyle(2, 0xfff0b5).setDepth(11).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: ring, radius: 86, alpha: 0, duration: 380, ease: 'Cubic.easeOut', onUpdate: () => ring.setRadius(ring.radius), onComplete: () => ring.destroy() });
+        this.sparks.setParticleTint(0xfff0b5);
+        this.sparks.explode(18, e.x, e.y);
+        this.flash(0xfff0b5, 120, 0.2);
+        Audio.play('nova', { volume: 0.8, pan: pan(e.x) });
         break;
       }
       case 'dynamite': {
@@ -698,7 +741,8 @@ export class RunScene extends Phaser.Scene {
     // shards (only the ones in view get a sprite; the trail budget stays flat however many fly)
     alive.clear();
     const cam = this.cameras.main;
-    const sparkP = Math.min(0.5, 8 / Math.max(1, sim.shards.length));
+    // a flat particle budget: the trail thins out as the air fills with shards
+    const sparkP = Math.min(1, 28 / Math.max(1, sim.shards.length));
     for (const sh of sim.shards) {
       if (sh.x < cam.scrollX - 24 || sh.x > cam.scrollX + VIEW_W + 24 || sh.y < cam.scrollY - 24 || sh.y > cam.scrollY + VIEW_H + 24) continue;
       alive.add(sh.id);
@@ -708,10 +752,7 @@ export class RunScene extends Phaser.Scene {
         this.shardSpr.set(sh.id, s);
       }
       s.setPosition(Math.round(sh.x), Math.round(sh.y)).setRotation(Math.atan2(sh.vy, sh.vx));
-      if (Math.random() < sparkP) {
-        this.sparks.setParticleTint(sh.color);
-        this.sparks.emitParticleAt(sh.x, sh.y, 1);
-      }
+      this.styleShard(sh, s, sparkP);
     }
     for (const [id, s] of this.shardSpr) if (!alive.has(id)) {
       s.destroy();
@@ -966,6 +1007,100 @@ export class RunScene extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------- popups
+  /**
+   * Every kind of shard looks like what it does: its own silhouette (the sprite),
+   * colour, size and trail. Glass is a long white streak, crystal a blue line that
+   * stays behind, ember throws sparks, cinnabar is big and trails smoke, void
+   * wobbles, prism cycles colour, geode glitters, vein flickers amber, fault
+   * sheds grit, a Cataclysm shard is huge and gold, and a rune turns.
+   */
+  private styleShard(sh: { type: string; x: number; y: number; color: number; id: number; vx: number; vy: number }, s: Img, sparkP: number) {
+    const t = this.time.now;
+    const r = Math.random();
+    s.setAlpha(1).setScale(1);
+    switch (sh.type) {
+      case 'glass':
+        s.setScale(2.2, 0.8);
+        if (r < sparkP * 0.6) this.emitTrail(sh, 0xffffff, 1);
+        break;
+      case 'crystal':
+        s.setScale(1.5, 1);
+        this.emitTrail(sh, 0x72aef2, sparkP);
+        break;
+      case 'ember':
+        s.setScale(1.1).setAlpha(0.8 + 0.2 * Math.sin(t / 40 + sh.id));
+        if (r < Math.min(1, sparkP * 1.2)) {
+          this.sparks.setParticleTint(r < 0.2 ? 0xffd877 : 0xff9a73);
+          this.sparks.emitParticleAt(sh.x, sh.y, 1);
+        }
+        break;
+      case 'cinnabar':
+        s.setScale(1.7);
+        if (r < sparkP * 0.6) {
+          this.smoke.setParticleTint(r < 0.15 ? 0xf0564a : 0x685e86);
+          this.smoke.emitParticleAt(sh.x, sh.y, 1);
+        }
+        break;
+      case 'void': {
+        s.setScale(1.2).setAlpha(0.85);
+        const wob = Math.sin(t / 60 + sh.id) * 2;
+        if (r < sparkP * 0.8) {
+          this.smoke.setParticleTint(r < 0.2 ? 0xb862de : 0x8034a6);
+          this.smoke.emitParticleAt(sh.x + wob, sh.y - wob, 1);
+        }
+        break;
+      }
+      case 'prism': {
+        const c = Phaser.Display.Color.HSVToRGB(((t / 500 + sh.id * 0.13) % 1 + 1) % 1, 0.45, 1) as Phaser.Types.Display.ColorObject;
+        const rgb = Phaser.Display.Color.GetColor(c.r, c.g, c.b);
+        s.setTint(rgb).setScale(1.2);
+        if (r < sparkP * 0.8) this.emitTrail(sh, rgb, 1);
+        break;
+      }
+      case 'geode':
+        s.setScale(1.3);
+        if (r < sparkP * 0.6) {
+          this.sparks.setParticleTint([0xb862de, 0xe9acff, 0xc8ecff][Math.floor(r * 10) % 3]);
+          this.sparks.emitParticleAt(sh.x + (Math.random() - 0.5) * 6, sh.y + (Math.random() - 0.5) * 6, 1);
+        }
+        break;
+      case 'vein':
+        s.setScale(1.4, 0.9).setAlpha(0.75 + 0.25 * Math.sin(t / 30 + sh.id));
+        this.emitTrail(sh, 0xf7b740, sparkP * 0.8);
+        break;
+      case 'fault':
+        s.setScale(1);
+        if (r < sparkP * 0.5) {
+          this.chips.setParticleTint(0xa3673f);
+          this.chips.emitParticleAt(sh.x, sh.y, 1);
+        }
+        break;
+      case 'cataclysm':
+        s.setScale(1.9);
+        this.emitTrail(sh, 0xffd877, Math.min(1, sparkP * 1.5));
+        break;
+      case 'rune':
+        s.setRotation(t / 160 + sh.id).setScale(1.2).setAlpha(0.7 + 0.3 * Math.sin(t / 90 + sh.id));
+        if (r < sparkP * 0.7) this.emitTrail(sh, 0x5fe0c4, 1);
+        break;
+      default:
+        if (r < sparkP) {
+          this.sparks.setParticleTint(sh.color);
+          this.sparks.emitParticleAt(sh.x, sh.y, 1);
+        }
+    }
+  }
+
+  /** a short fading line behind a shard (`amount` < 1 thins it out when the air is full) */
+  private emitTrail(sh: { x: number; y: number; vx: number; vy: number }, tint: number, amount: number) {
+    if (amount < 1 && Math.random() > amount) return;
+    const sp = Math.hypot(sh.vx, sh.vy) || 1;
+    this.trail.setParticleTint(tint);
+    // two points back along the path make the line instead of a dot
+    this.trail.emitParticleAt(sh.x - (sh.vx / sp) * 3, sh.y - (sh.vy / sp) * 3, 1);
+    this.trail.emitParticleAt(sh.x - (sh.vx / sp) * 7, sh.y - (sh.vy / sp) * 7, 1);
+  }
+
   private popup(s: string, x: number, y: number, color: number, icon?: string) {
     const t = this.add.bitmapText(Math.round(x), Math.round(y), 'pixel_o', s).setOrigin(0.5, 1).setTint(color).setDepth(13);
     this.popups.push(t);

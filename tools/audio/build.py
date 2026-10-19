@@ -38,7 +38,8 @@ def encode(x: np.ndarray, path: str, q: int = 4):
         os.unlink(tmp.name)
 
 
-LOUD = {"tip": -24, "chain_milestone": -19, "death_gutter": -20, "ui_move": -26, "tick": -28, "ui_back": -22, "ui_select": -21, "ui_deny": -22, "drill_rock": -24, "drill_ore": -24,
+LOUD = {"shard_glass": -27, "shard_crystal": -26, "shard_ember": -26, "shard_cinnabar": -23, "shard_geode": -26, "shard_vein": -26, "shard_fault": -27,
+        "shard_cataclysm": -21, "shard_void": -26, "shard_prism": -26, "shard_rune": -26, "surge": -21, "nova": -20, "tip": -24, "chain_milestone": -19, "death_gutter": -20, "ui_move": -26, "tick": -28, "ui_back": -22, "ui_select": -21, "ui_deny": -22, "drill_rock": -24, "drill_ore": -24,
         "pickup": -24, "thrust_start": -28, "heartbeat": -22, "reroll": -24, "biome": -21, "land": -22,
         "explode": -17, "levelup": -19, "achievement": -20, "shatter": -21, "cashout": -21, "seal_break": -16, "geode": -20,
         "relic": -19, "discover": -21, "heart_break": -15, "drill_loop": -26}
