@@ -26,7 +26,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'first_light', name: 'First Light', desc: 'Finish your first dig.', icon: 'lantern', check: (s) => s.stats.runs >= 1 },
   { id: 'down_we_go', name: 'Down We Go', desc: 'Reach 50 m.', icon: 'drill', check: (s) => s.maxDepth >= 50 },
   { id: 'amber_age', name: 'Amber Age', desc: 'Reach the Amberstone.', icon: 'drill', check: (s) => s.maxDepth >= 120 },
-  { id: 'seal_breaker', name: 'Seal Breaker', desc: 'Break a Strata Seal.', icon: 'shard', check: (s) => s.stats.seals >= 1 },
+  { id: 'seal_breaker', name: 'Ribbon Cutter', desc: 'Break into a rune ribbon.', icon: 'shard', check: (s) => s.stats.seals >= 1 },
   { id: 'glimmering', name: 'Glimmering', desc: 'Reach the Glimmer Grotto.', icon: 'shard', check: (s) => s.maxDepth >= 306 },
   { id: 'into_the_fire', name: 'Into the Fire', desc: 'Reach Emberdeep.', icon: 'bomb', check: (s) => s.maxDepth >= 526 },
   { id: 'hollowed', name: 'Hollowed', desc: 'Reach The Hollow.', icon: 'eye', check: (s) => s.maxDepth >= 766 },

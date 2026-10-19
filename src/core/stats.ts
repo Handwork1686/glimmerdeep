@@ -44,6 +44,10 @@ export interface Stats {
   drillShardBonus: number; // extra shards in each drill volley
   shardOreMul: number; // shards deal this much more to ore
   shardFuel: number; // fuel per shard break (tapered with depth, capped at 2 fuel/s)
+  shardlight: number; // fuel per 10 shard breaks (boon)
+  glassHarvest: number; // chance a drill break throws 2 extra glass shards (boon)
+  lanternNova: boolean; // below 25% fuel, once a dig: a shard burst and some fuel (boon)
+  echoChain: boolean; // a chain of 20+ ends, an echo volley follows (boon)
   echoShard: boolean; // an Echo Drill triple hit also fires a glass shard
   chainPot: number; // chain pot multiplier growth
   chainTime: number; // seconds a chain stays alive
@@ -90,7 +94,7 @@ export function baseStats(): Stats {
     emberSplit: 0, cinnabarMul: 1, ricochet: 0,
     chainPot: 0.06, chainTime: 1.2, chainFuel: 0.06, resonance: 0, cataclysm: true, cataclysmEvery: 100, prismHeart: false, supernova: false,
     goldMul: 1, doubleOre: 0, gemChance: 0, deepPockets: 0, costMul: 1, fossilBonus: 0, xpMul: 1, survey: 0, surveyRange: 0, midas: false, midasTouch: 0, lanternGold: 0, boonGold: 0,
-    bombCooldown: 10, dynamite: 0, boonEcho: 0, chainKeeper: 0, drillShardEvery: 10, drillShardBonus: 0, shardOreMul: 1, shardFuel: 0, echoShard: false, boonChoices: 3, rerolls: 0, banishes: 0, headStart: 0,
+    bombCooldown: 10, dynamite: 0, boonEcho: 0, chainKeeper: 0, drillShardEvery: 10, drillShardBonus: 0, shardOreMul: 1, shardFuel: 0, echoShard: false, shardlight: 0, glassHarvest: 0, lanternNova: false, echoChain: false, boonChoices: 3, rerolls: 0, banishes: 0, headStart: 0,
     luck: 0, prospect: { ...NO_PROSPECT },
   };
 }

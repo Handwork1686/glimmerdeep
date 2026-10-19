@@ -9,6 +9,8 @@ import { drainCurve, potMultiplier, type SimEvent } from '../core/sim';
 import { Audio } from '../systems/audio';
 import { Controls } from '../systems/controls';
 import { Save } from '../systems/save';
+import { BoonBar } from '../ui/boonbar';
+import { pushToast, showToasts } from '../ui/toasts';
 import { COLORS, fmt, panel, txt, wrap } from '../ui/widgets';
 import type { RunScene } from './Run';
 import { fmtKeys, S } from '../data/strings';
@@ -33,6 +35,7 @@ export class HudScene extends Phaser.Scene {
   private gemIcon!: Phaser.GameObjects.Image;
   private coreIcon!: Phaser.GameObjects.Image;
   private xpBar!: Phaser.GameObjects.Graphics;
+  private boonBar!: BoonBar;
   private lvText!: Phaser.GameObjects.BitmapText;
   private shardBombIcon!: Phaser.GameObjects.Image;
   private shardBombFill!: Phaser.GameObjects.Graphics;
@@ -85,6 +88,7 @@ export class HudScene extends Phaser.Scene {
   }
 
   create() {
+    showToasts(this);
     // light bar
     this.add.image(10, 10, 'atlas', 'ico_light').setOrigin(0.5);
     this.lightBar = this.add.graphics();
@@ -105,6 +109,9 @@ export class HudScene extends Phaser.Scene {
     this.gemText = txt(this, VIEW_W - 14, 48, '0', COLORS.blue).setOrigin(1, 0).setVisible(false);
     this.coreIcon = this.add.image(VIEW_W - 8, 63, 'atlas', 'ico_core').setVisible(false);
     this.coreText = txt(this, VIEW_W - 14, 59, '0', COLORS.teal).setOrigin(1, 0).setVisible(false);
+    // the boons held this dig, top right
+    this.boonBar = new BoonBar(this);
+    this.events.once('shutdown', () => this.boonBar.destroy());
     // xp
     this.xpBar = this.add.graphics();
     this.lvText = txt(this, 4, VIEW_H - 14, 'Lv 1', COLORS.teal);
@@ -195,8 +202,8 @@ export class HudScene extends Phaser.Scene {
     const key = shardCodexKey(id);
     if (this.seen.has(key) || (Save.data.codex[key] ?? 0) > 0) return;
     this.seen.add(key);
-    this.showCard(`${S.cards.newShard}: ${SHARD_BY_ID[id].name.toUpperCase()}`, SHARD_BY_ID[id].desc);
-    Audio.play('discover');
+    const t = SHARD_BY_ID[id];
+    pushToast({ kind: 'shard', title: `${S.cards.newShard}: ${t.name}`, sub: t.hint, icon: `shard_${id}`, tint: t.color });
   }
 
   private makeVignette(): string {
@@ -248,7 +255,7 @@ export class HudScene extends Phaser.Scene {
         if (e.count >= 8) this.tip('chain');
         break;
       case 'milestone':
-        this.showCard(`${S.cards.milestone}: ${e.name.toUpperCase()}`, '+5 max fuel, for good');
+        pushToast({ kind: 'milestone', title: `${S.cards.milestone}: ${e.name}`, sub: '+5 max fuel, for good', icon: 'icon_lantern' });
         break;
       case 'geode':
         this.tip('geode');
@@ -288,6 +295,7 @@ export class HudScene extends Phaser.Scene {
     const dt = deltaMs / 1000;
     const sim = this.run.sim;
     this.flyT -= dt;
+    this.boonBar.update(sim.boons, { overburnT: sim.overburnT, novaUsed: sim.lanternNovaUsed });
     // light bar
     const frac = sim.lightFrac();
     const w = 110;
@@ -483,11 +491,20 @@ export class HudScene extends Phaser.Scene {
       return card;
     });
     const sim = this.run.sim;
-    const opts: string[] = [];
-    if (sim.rerolls > 0) opts.push(`${Controls.label('bomb')}: reroll (${sim.rerolls})`);
-    if (sim.banishes > 0) opts.push(`${Controls.label('shardbomb')}: banish (${sim.banishes})`);
-    opts.push(`${Controls.label('back')}: skip (+8 fuel)`);
-    c.add(txt(this, VIEW_W / 2, 204, opts.join('     '), COLORS.dim).setOrigin(0.5, 0));
+    // reroll and banish stay on screen: bright while you have one, greyed out when you do not
+    const opts: [string, boolean][] = [
+      [`${Controls.label('bomb')}: reroll (${sim.rerolls})`, sim.rerolls > 0],
+      [`${Controls.label('shardbomb')}: banish (${sim.banishes})`, sim.banishes > 0],
+      [`${Controls.label('back')}: skip (+8 fuel)`, true],
+    ];
+    const texts = opts.map(([s, on]) => txt(this, 0, 204, s, on ? COLORS.text : COLORS.faint).setAlpha(on ? 1 : 0.6));
+    const span = texts.reduce((a, t) => a + t.width, 0) + 20 * (texts.length - 1);
+    let ox = VIEW_W / 2 - span / 2;
+    for (const t of texts) {
+      t.setX(Math.round(ox));
+      ox += t.width + 20;
+      c.add(t);
+    }
     this.choice = c;
     this.choiceLock = 0.35;
     this.refreshChoice();

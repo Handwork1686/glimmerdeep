@@ -336,6 +336,9 @@ export class CampScene extends Phaser.Scene {
     this.refresh();
   }
 
+  /** nodes whose next level you can afford right now (their border pulses) */
+  private buyable = new Set<string>();
+
   private refresh() {
     const s = Save.data;
     this.goldT.setText(fmt(s.gold));
@@ -356,13 +359,16 @@ export class CampScene extends Phaser.Scene {
       const { ok } = vis ? this.canAfford(n, lvl) : { ok: false };
       const frame = lvl >= n.max ? 'node_max' : lvl > 0 ? 'node_owned' : vis ? 'node_open' : 'node_locked';
       node.frame.setFrame(frame);
-      node.icon.setTint(ghost ? 0x241f3d : lvl > 0 ? 0xffffff : ok ? 0xd0d0d0 : 0x707080);
-      node.icon.setAlpha(ghost ? 0.8 : 1);
-      node.lvl.setText(n.infinite ? `${lvl}` : `${lvl}/${n.max}`).setTint(lvl >= n.max ? COLORS.gold : COLORS.text);
-      if (vis && lvl < n.max && ok && n.id !== 'root') {
-        // affordable: soft pulse
-        node.frame.setTint(0xffffff);
-      } else node.frame.clearTint();
+      // can you buy the next level? full colour and a pulsing border. If not, the node greys out.
+      const buyable = vis && lvl < n.max && n.id !== 'root' && ok;
+      const wantsMore = vis && lvl < n.max && n.id !== 'root' && !ok;
+      node.icon.setTint(ghost ? 0x241f3d : wantsMore ? (lvl > 0 ? 0x9a93b0 : 0x5b5673) : 0xffffff);
+      node.icon.setAlpha(ghost ? 0.8 : wantsMore ? 0.7 : 1);
+      node.frame.setAlpha(wantsMore ? 0.6 : 1);
+      node.lvl.setText(n.infinite ? `${lvl}` : `${lvl}/${n.max}`).setTint(lvl >= n.max ? COLORS.gold : wantsMore ? COLORS.dim : COLORS.text);
+      if (buyable) this.buyable.add(n.id);
+      else this.buyable.delete(n.id);
+      node.frame.clearTint();
       for (const r of n.requires) {
         const rn = UPGRADE_BY_ID[r];
         if (!rn) continue;
@@ -442,14 +448,22 @@ export class CampScene extends Phaser.Scene {
     }
     y = Math.max(y + 4, 84);
     if (y > 150) y = 150;
-    const row = (icon: string, have: number, need: number, color: number) => {
-      this.info.add(this.add.image(4, y + 4, 'atlas', icon));
-      this.info.add(txt(this, 12, y, fmt(need), have >= need ? color : COLORS.red));
+    // the price: green when you can pay it, dim red with the shortfall when you cannot
+    const row = (icon: string, what: string, have: number, need: number) => {
+      const enough = have >= need;
+      const img = this.add.image(4, y + 4, 'atlas', icon);
+      if (!enough) img.setTint(0x8a80a6);
+      this.info.add(img);
+      this.info.add(txt(this, 12, y, fmt(need), enough ? COLORS.green : 0xbd2d3a));
       y += 11;
+      if (!enough) {
+        this.info.add(txt(this, 12, y, `Need ${fmt(need - have)} more ${what}`, COLORS.red, false));
+        y += 10;
+      }
     };
-    if (c.gold > 0) row('ico_gold', s.gold, c.gold, COLORS.gold);
-    if (c.gems) row('ico_gem', s.gems, c.gems, COLORS.blue);
-    if (c.cores) row('ico_core', s.cores, c.cores, COLORS.teal);
+    if (c.gold > 0) row('ico_gold', 'gold', s.gold, c.gold);
+    if (c.gems) row('ico_gem', 'gems', s.gems, c.gems);
+    if (c.cores) row('ico_core', c.cores > 1 ? 'cores' : 'core', s.cores, c.cores);
   }
 
   private navigate(dx: number, dy: number) {
@@ -480,6 +494,12 @@ export class CampScene extends Phaser.Scene {
 
   update(_t: number, deltaMs: number) {
     const dt = deltaMs / 1000;
+    // nodes you can afford breathe between white and gold
+    if (this.buyable.size) {
+      const k = 0.5 + 0.5 * Math.sin(this.time.now / 260);
+      const tint = Phaser.Display.Color.GetColor(255, Math.round(255 - 40 * k), Math.round(255 - 140 * k));
+      for (const id of this.buyable) this.nodes.get(id)?.frame.setTint(tint);
+    }
     Controls.poll(this);
     if (this.focus === 'menu') {
       this.menu.active = true;

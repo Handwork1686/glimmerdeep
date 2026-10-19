@@ -74,6 +74,8 @@ export interface Shard {
   burst: number;
   /** splits in two on first impact (prism) */
   split: boolean;
+  /** thrown by an Echo Chain volley: it can never set off another echo */
+  echo?: boolean;
   /** a prism shard that may still shatter the ore around its first impact (children cannot) */
   nova: boolean;
   /** curves toward ore and crystal (void) */
@@ -123,6 +125,8 @@ export type SimEvent =
   | { t: 'shardBomb'; x: number; y: number }
   | { t: 'cataclysm'; x: number; y: number }
   | { t: 'cataclysmWarn'; x: number; y: number }
+  | { t: 'lanternNova'; x: number; y: number }
+  | { t: 'echo'; x: number; y: number }
   | { t: 'surgeArm' }
   | { t: 'surgeFire'; x: number; y: number; dir: string; n: number }
   | { t: 'nova'; x: number; y: number; n: number; tile: number }
@@ -234,6 +238,12 @@ export const NOVA_RADIUS = 5;
 export const CATACLYSM_WARN = 0.5;
 /** the most fuel shard breaks (Fuel Recycler, Shardlight) restore per second */
 export const SHARD_FUEL_CAP = 2;
+/** Overburn: this long, at twice the burn and twice the shard damage */
+export const OVERBURN_SECONDS = 30;
+/** Echo Chain: a chain this long echoes, a second later, and never within this many seconds of another echo */
+export const ECHO_CHAIN = 20;
+export const ECHO_DELAY = 1;
+export const ECHO_COOLDOWN = 2;
 
 /**
  * The lantern burns faster the deeper you are: about as forgiving as ever in the
@@ -324,6 +334,18 @@ export class Sim {
   private surgeArmedAt = 0;
   surgesFired = 0;
   novasFired = 0;
+  /** seconds of Overburn left (twice the burn, twice the shard damage) */
+  overburnT = 0;
+  /** Lantern Nova has gone off this dig */
+  lanternNovaUsed = false;
+  /** seconds until a queued Echo Chain volley fires, and where from */
+  private echoT = 0;
+  private echoAt = { x: 0, y: 0 };
+  /** when an echo shard last broke something (no echo of an echo) */
+  private echoLastT = -99;
+  /** an echo shard broke something during this chain: the chain cannot echo */
+  private echoInChain = false;
+  echoesFired = 0;
   /** seconds until a warned Cataclysm volley erupts (0 = none) */
   private cataclysmT = 0;
   secondWindsUsed = 0;
@@ -464,6 +486,7 @@ export class Sim {
     // drain reductions stack, but never below DRAIN_FLOOR: the deep always bites
     let drain = Math.max(DRAIN_FLOOR, this.stats.lightDrain) * this.gloom.drainMul * drainCurve(this.depth()) * this.stallMul * this.throughputMul();
     if (this.stats.lastLight && this.lightFrac() < 0.25) drain *= 0.5;
+    if (this.overburnT > 0) drain *= 2;
     return drain;
   }
 
@@ -616,6 +639,7 @@ export class Sim {
     this.drillBreaks++;
     this.drillBreakTimes.push(this.time);
     if (this.drillBreaks % Math.max(3, Math.round(this.stats.drillShardEvery)) === 0) this.drillVolley();
+    if (this.stats.glassHarvest > 0 && this.rng.chance(this.stats.glassHarvest)) this.drillVolley(2);
   }
 
   /** glass shards from the drill: along its direction, or toward a valuable tile just ahead */
@@ -645,6 +669,7 @@ export class Sim {
   private shardBreak(depth: number) {
     this.shardBreaks++;
     if (this.stats.shardFuel > 0) this.shardFuel(this.stats.shardFuel * deepTaper(depth), 'recycler');
+    if (this.stats.shardlight > 0 && this.shardBreaks % 10 === 0) this.shardFuel(this.stats.shardlight * deepTaper(depth), 'shardlight');
   }
 
   /** every fuel source that comes from shard breaks goes through here: tapered by the caller, capped at SHARD_FUEL_CAP per second */
@@ -701,9 +726,36 @@ export class Sim {
       if (this.stats.midas && !this.over) this.spawnShards(this.player.x, this.player.y, 'glass', 4, { gen: 1 });
       this.emit({ t: 'chainEnd', count: this.chain, pot: this.potGold, mult, bonus });
     }
+    // Echo Chain: a long chain's end is answered by one echo volley, never by an echo of an echo
+    if (
+      this.stats.echoChain && this.chain >= ECHO_CHAIN && !this.over && this.echoT <= 0 && !this.echoInChain &&
+      this.time - this.echoLastT > ECHO_COOLDOWN && !this.shards.some((s) => s.echo)
+    ) {
+      this.echoT = ECHO_DELAY;
+      this.echoAt = { x: this.player.x, y: this.player.y };
+    }
     this.chain = 0;
     this.chainTimer = 0;
     this.potGold = 0;
+    this.echoInChain = false;
+  }
+
+  /** the echo volley: glass shards from where the chain ended, each flagged so they cannot echo again */
+  private fireEcho() {
+    const { x, y } = this.echoAt;
+    this.echoesFired++;
+    this.emit({ t: 'echo', x, y });
+    const n = this.spawnShards(x, y, 'glass', 12, { exact: true, gen: 1 });
+    for (const s of this.shards.slice(this.shards.length - n)) s.echo = true;
+  }
+
+  /** Lantern Nova: once a dig, when the fuel is nearly gone, a burst of shards and a little light */
+  private lanternNova() {
+    this.lanternNovaUsed = true;
+    const p = this.player;
+    this.emit({ t: 'lanternNova', x: p.x, y: p.y });
+    this.spawnShards(p.x, p.y, 'glass', 18, { exact: true, power: BASE_SHARD_DAMAGE * 2.5 });
+    this.addLight(15 * deepTaper(this.depth()), 'lanternnova');
   }
 
   private findRelic(k: number, cx: number, cy: number) {
@@ -813,6 +865,7 @@ export class Sim {
     let dmg = (o.power ?? BASE_SHARD_DAMAGE) * (s.shardDamage / BASE_SHARD_DAMAGE) * type.dmgMul * overflow;
     if (!o.flat) dmg *= shardDepthScale(depth);
     if (id === 'cinnabar') dmg *= s.cinnabarMul;
+    if (this.overburnT > 0) dmg *= 2;
     const full = (o.spread ?? Math.PI * 2) >= Math.PI * 2 - 1e-6;
     const a0 = o.angle ?? this.rng.range(0, Math.PI * 2);
     for (let k = 0; k < n; k++) {
@@ -1039,7 +1092,7 @@ export class Sim {
     this.boons[def.id] = (this.boons[def.id] ?? 0) + 1;
     const prevMax = this.stats.maxLight;
     this.stats = this.recompute();
-    if (def.onPick === 'refill') this.addLight(15, 'boon');
+    if (def.onPick === 'overburn') this.overburnT = OVERBURN_SECONDS;
     void prevMax;
     this.light = Math.min(this.light, this.stats.maxLight);
     void silent;
@@ -1114,6 +1167,12 @@ export class Sim {
       if (!chewing) this.chainTimer -= dt * (this.idle ? IDLE_CHAIN_DECAY : 1);
       if (this.chainTimer <= 0) this.cashOut();
     }
+    if (this.echoT > 0) {
+      this.echoT -= dt;
+      if (this.echoT <= 0) this.fireEcho();
+    }
+    if (this.overburnT > 0) this.overburnT = Math.max(0, this.overburnT - dt);
+    if (this.stats.lanternNova && !this.lanternNovaUsed && this.lightFrac() < 0.25) this.lanternNova();
     if (this.cataclysmT > 0) {
       this.cataclysmT -= dt;
       if (this.cataclysmT <= 0) this.cataclysmVolley();
@@ -1405,6 +1464,10 @@ export class Sim {
           continue;
         }
         const broke = !def.unbreakable && this.damageTile(tx, ty, s.dmg, 'shard', s.gen + 1, s.type);
+        if (broke && s.echo) {
+          this.echoLastT = this.time;
+          this.echoInChain = true;
+        }
         const a = Math.atan2(s.vy, s.vx);
         const hx = tx * TILE + 8;
         const hy = ty * TILE + 8;

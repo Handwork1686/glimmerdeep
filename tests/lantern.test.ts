@@ -62,7 +62,8 @@ describe('the lantern', () => {
       for (let i = 0; i < 60 * 300 && !sim.over; i++) {
         if (sim.pendingLevels > 0) {
           const h = sim.openChoice();
-          if (h?.length) sim.choose(h[0].id);
+          // a sensible pick: Overburn doubles the burn, which a first dig on 60 fuel cannot afford
+          if (h?.length) sim.choose((h.find((b) => b.id !== 'overburn') ?? h[0]).id);
         }
         const p = sim.player;
         sim.step({ ...NO_INPUT, down: true, right: p.drill === null && p.vy === 0 && i % 120 < 30 });

@@ -523,6 +523,22 @@ export class RunScene extends Phaser.Scene {
         Audio.play('surge', { volume: 0.7, rate: 0.7 });
         break;
       }
+      case 'echo': {
+        const ring = this.add.circle(e.x, e.y, 6).setStrokeStyle(2, 0xc8ecff).setDepth(11).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: ring, radius: 50, alpha: 0, duration: 380, ease: 'Cubic.easeOut', onUpdate: () => ring.setRadius(ring.radius), onComplete: () => ring.destroy() });
+        this.popup('ECHO', e.x, e.y - 8, 0xc8ecff);
+        Audio.play('boon_pick', { volume: 0.6, rate: 1.4, pan: pan(e.x) });
+        break;
+      }
+      case 'lanternNova': {
+        const ring = this.add.circle(e.x, e.y, 6).setStrokeStyle(3, 0xffd877).setDepth(11).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: ring, radius: 90, alpha: 0, duration: 450, ease: 'Cubic.easeOut', onUpdate: () => ring.setRadius(ring.radius), onComplete: () => ring.destroy() });
+        this.popup('LANTERN NOVA', e.x, e.y - 20, 0xffd877);
+        this.flash(0xffd877, 160, 0.22);
+        this.shake(220, 0.005);
+        Audio.play('shardbomb', { volume: 1 });
+        break;
+      }
       case 'surgeArm':
         this.popup('SURGE!', sim.player.x, sim.player.y - 22, 0xffd877);
         this.flash(0xffd877, 160, 0.2);

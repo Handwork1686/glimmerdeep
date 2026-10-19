@@ -3,7 +3,7 @@ import { DEMO, VIEW_H, VIEW_W } from '../config';
 import { BIOMES, HEART_DEPTH, SEALS } from '../data/biomes';
 import { RELIC_BY_ID } from '../data/relics';
 import { S as STR } from '../data/strings';
-import { BOON_BY_ID, RARITY_COLOR } from '../data/boons';
+import { BoonBar } from '../ui/boonbar';
 import type { RunSummary } from '../core/sim';
 import { checkAll, unlock } from '../systems/achievements';
 import { Audio } from '../systems/audio';
@@ -71,16 +71,11 @@ export class ResultsScene extends Phaser.Scene {
     // boons taken
     panel(this, 292, 54, 128, 170);
     txt(this, 356, 62, 'BOONS', COLORS.dim).setOrigin(0.5, 0);
-    const boons = Object.entries(r.boons);
-    boons.slice(0, 18).forEach(([id, n], i) => {
-      const def = BOON_BY_ID[id];
-      if (!def) return;
-      const x = 306 + (i % 3) * 38;
-      const y = 84 + Math.floor(i / 3) * 22;
-      this.add.image(x + 6, y, 'atlas', `icon_${def.icon}`).setTint(RARITY_COLOR[def.rarity]);
-      if (n > 1) txt(this, x + 14, y - 2, `x${n}`, COLORS.text, true);
-    });
-    if (boons.length === 0) txt(this, 356, 130, 'none', COLORS.faint).setOrigin(0.5);
+    // the same bar as in play, with the same hover tooltips
+    const boonBar = new BoonBar(this, 416, 80);
+    boonBar.update(r.boons);
+    this.events.once('shutdown', () => boonBar.destroy());
+    if (Object.keys(r.boons).length === 0) txt(this, 356, 130, 'none', COLORS.faint).setOrigin(0.5);
 
     const notes: string[] = [];
     for (const id of r.relics) notes.push(`Relic: ${RELIC_BY_ID[id]?.name ?? id}`);
