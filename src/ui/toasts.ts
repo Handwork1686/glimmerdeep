@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { onUnlock } from '../systems/achievements';
 import { Audio } from '../systems/audio';
 import { achievementToast, Toast, TOAST_H, TOAST_W, TOAST_Y, ToastQueue } from './toastQueue';
-import { COLORS, fadeTo, panel, txt } from './widgets';
+import { COLORS, fadeTo, panel, txt, wrap } from './widgets';
 
 /** Toasts show one at a time in the bottom-left corner (see toastQueue.ts for where, and why). */
 const SHOW_MS = 3000;
@@ -50,11 +50,11 @@ function pump() {
   const more = queue.waiting;
   const c = scene.add.container(-TOAST_W - 4, TOAST_Y).setDepth(1000).setScrollFactor(0);
   const bg = panel(scene, 0, 0, TOAST_W, TOAST_H, t.kind === 'achievement' || t.kind === 'batch' ? 'panel_hi' : 'panel');
-  const icon = scene.add.image(16, 17, 'atlas', t.icon && scene.textures.get('atlas').has(t.icon) ? t.icon : 'icon_star');
+  const icon = scene.add.image(16, TOAST_H / 2, 'atlas', t.icon && scene.textures.get('atlas').has(t.icon) ? t.icon : 'icon_star');
   if (t.tint !== undefined) icon.setTint(t.tint);
   const color = t.kind === 'shard' ? COLORS.blue : t.kind === 'milestone' ? COLORS.teal : COLORS.gold;
   const t1 = txt(scene, 30, 6, t.title, color);
-  const t2 = txt(scene, 30, 18, fit(scene, t.sub, TOAST_W - 34), COLORS.text);
+  const t2 = txt(scene, 30, 18, wrap(scene, t.sub, TOAST_W - 40), COLORS.text, false);
   c.add([bg, icon, t1, t2]);
   if (more > 0) c.add(txt(scene, TOAST_W - 4, TOAST_H + 1, `+${more} more`, COLORS.dim).setOrigin(1, 0));
   Audio.play(t.kind === 'achievement' || t.kind === 'batch' ? 'achievement' : 'discover', { volume: 0.7 });
@@ -80,16 +80,4 @@ function pump() {
   });
   scene.tweens.add({ targets: c, x: 4, duration: 300, ease: 'Back.easeOut' });
   scene.time.delayedCall(SHOW_MS, finish);
-}
-
-/** trim a line to a pixel width with an ellipsis */
-function fit(scene: Phaser.Scene, s: string, width: number): string {
-  const probe = scene.add.bitmapText(0, 0, 'pixel_o', s);
-  let out = s;
-  while (probe.width > width && out.length > 4) {
-    out = out.slice(0, -2);
-    probe.setText(out + '..');
-  }
-  probe.destroy();
-  return out === s ? s : out + '..';
 }

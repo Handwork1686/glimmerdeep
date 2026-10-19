@@ -29,9 +29,9 @@ export const BOONS: BoonDef[] = [
   b({ id: 'shrapnel', name: 'Shrapnel', desc: 'Shard bursts throw 20% more shards.', icon: 'bomb', rarity: 'common', max: 3, apply: (s, k) => { s.burstBonus += 0.2 * k; } }),
   b({ id: 'dowsing', name: 'Dowsing Rod', desc: 'This dig, newly explored ground holds +40% shard sources and +30% geodes.', icon: 'radius', rarity: 'common', max: 2, apply: (s, k) => { s.prospect.shards += 0.4 * k; s.prospect.geodes += 0.3 * k; } }),
   b({ id: 'longfuse', name: 'Long Fuse', desc: 'Chains last 0.25 s longer.', icon: 'clock', rarity: 'common', max: 3, apply: (s, k) => { s.chainTime += 0.25 * k; } }),
-  b({ id: 'kindling', name: 'Kindled Links', desc: 'Chain links refuel 25% more (each stack adds another 25%).', icon: 'chain', rarity: 'common', max: 3, apply: (s, k) => { s.chainFuel *= 1 + 0.25 * k; } }),
+  b({ id: 'kindling', name: 'Kindled Links', desc: 'Chain links refuel 25% more per stack, and every 20 links restore another 1 fuel per stack (less in the deep).', icon: 'chain', rarity: 'common', max: 3, apply: (s, k) => { s.chainFuel *= 1 + 0.25 * k; s.kindledTick += k; } }),
   b({ id: 'shardlight', name: 'Shardlight', desc: 'Every 10 shard breaks restore 1 fuel (less in the deep, and never more than 2 fuel a second).', icon: 'lantern', rarity: 'common', max: 2, apply: (s, k) => { s.shardlight += k; } }),
-  b({ id: 'glassharvest', name: 'Glass Harvest', desc: 'Drill breaks have an 8% chance to throw 2 extra glass shards.', icon: 'shard', rarity: 'common', max: 3, apply: (s, k) => { s.glassHarvest += 0.08 * k; } }),
+  b({ id: 'glassharvest', name: 'Glass Harvest', desc: 'Drill breaks have a 15% chance per stack to throw 4 extra glass shards.', icon: 'shard', rarity: 'common', max: 3, apply: (s, k) => { s.glassHarvest += 0.15 * k; } }),
   // rare
   b({ id: 'widebit', name: 'Wide Bit', desc: 'Drilling also hits side tiles for 50%.', icon: 'drill', rarity: 'rare', max: 2, apply: (s, k) => { s.wideBit += 0.5 * k; } }),
   b({ id: 'echo', name: 'Echo Drill', desc: 'Every 4th hit strikes three times.', icon: 'speed', rarity: 'rare', max: 1, apply: (s) => { s.echoEvery = s.echoEvery ? Math.min(s.echoEvery, 3) : 4; } }),
@@ -43,13 +43,13 @@ export const BOONS: BoonDef[] = [
   b({ id: 'redhot', name: 'Red Hot', desc: 'Drill heat gives +20% more speed.', icon: 'speed', rarity: 'rare', max: 2, apply: (s, k) => { s.heatMax += 0.2 * k; } }),
   b({ id: 'seismic', name: 'Seismic Landing', desc: 'Hard landings crack the rock below.', icon: 'bomb', rarity: 'rare', max: 1, apply: (s) => { s.seismic += 1; } }),
   b({ id: 'deeppockets', name: 'Deep Pockets', desc: '+6% gold per 100 m of depth.', icon: 'coin', rarity: 'rare', max: 2, apply: (s, k) => { s.deepPockets += 0.06 * k; } }),
-  b({ id: 'overburn', name: 'Overburn', desc: 'For 30 s the lantern burns twice as fast and every shard hits twice as hard.', icon: 'speed', rarity: 'rare', max: 1, onPick: 'overburn', apply: () => {} }),
-  b({ id: 'lanternnova', name: 'Lantern Nova', desc: 'Once a dig, when fuel falls below 25%, a burst of shards erupts around you and refuels the lantern.', icon: 'bomb', rarity: 'rare', max: 1, apply: (s) => { s.lanternNova = true; } }),
-  b({ id: 'echochain', name: 'Echo Chain', desc: 'When a chain of 20+ ends, an echo volley of shards fires from where it ended, a second later.', icon: 'chain', rarity: 'rare', max: 1, apply: (s) => { s.echoChain = true; } }),
+  b({ id: 'overburn', name: 'Overburn', desc: 'For 30 s the lantern burns twice as fast, the drill spins 2.5 times as fast and every shard hits twice as hard.', icon: 'speed', rarity: 'rare', max: 1, onPick: 'overburn', apply: () => {} }),
+  b({ id: 'lanternnova', name: 'Lantern Nova', desc: 'Once a dig, when fuel falls below 25%, a burst of shards erupts around you and refuels 30% of the tank (less in the deep).', icon: 'bomb', rarity: 'rare', max: 1, apply: (s) => { s.lanternNova = true; } }),
+  b({ id: 'echochain', name: 'Echo Chain', desc: 'When a chain of 20+ ends, a big echo volley of shards (bigger for longer chains) fires from where it ended, a second later.', icon: 'chain', rarity: 'rare', max: 1, apply: (s) => { s.echoChain = true; } }),
   // mythic
   b({ id: 'secondwind', name: 'Second Wind', desc: 'Relight once when your fuel runs out (25 fuel).', icon: 'heart', rarity: 'mythic', max: 1, apply: (s) => { s.secondWind += 1; } }),
   b({ id: 'supernova', name: 'Supernova', desc: 'Big shard bursts (6+) shatter every crystal within 2 tiles.', icon: 'shard', rarity: 'mythic', max: 1, apply: (s) => { s.supernova = true; } }),
-  b({ id: 'midastouch', name: 'Midas Touch', desc: 'Plain rock sometimes holds a gold nugget.', icon: 'coin', rarity: 'mythic', max: 1, apply: (s) => { s.midasTouch += 0.06; } }),
+  b({ id: 'midastouch', name: 'Midas Touch', desc: 'Plain rock sometimes holds a gold nugget.', icon: 'coin', rarity: 'mythic', max: 1, apply: (s) => { s.midasTouch += 0.025; } }),
   b({ id: 'prismheart', name: 'Prism Heart', desc: 'Every shard splits in two when it breaks something.', icon: 'gem', rarity: 'mythic', max: 1, apply: (s) => { s.prismHeart = true; } }),
 ];
 

@@ -1,4 +1,4 @@
-import { blendAt, type BiomeDef } from '../data/biomes';
+import { BIOMES, blendAt, type BiomeDef } from '../data/biomes';
 import { TILES } from '../data/tiles';
 
 /**
@@ -60,6 +60,29 @@ export function baseHpMean(depth: number): number {
     MEAN_CACHE[d] = v;
   }
   return v;
+}
+
+/** the plain rock of every layer (what base tiles are) */
+const BASE = new Set<number>(BIOMES.flatMap((b) => b.base.map(([t]) => t)));
+/** the layer an ore or scatter tile belongs to: the shallowest that lists it, and how tough that layer's rock is */
+const HOME_ROCK = new Map<number, number>();
+for (const b of BIOMES) {
+  for (const t of [...b.ores.map((o) => o.tile), ...b.scatter.map(([t]) => t)]) {
+    if (!HOME_ROCK.has(t) && !BASE.has(t)) HOME_ROCK.set(t, TILES[b.base[0][0]].hp);
+  }
+}
+
+/**
+ * Ore, crystal and scatter tiles keep their toughness relative to the rock of
+ * the layer they belong to (clamped, so quartz in the Heart is not as soft as dirt
+ * and copper at the surface is not as hard as a boulder), and follow the same depth
+ * curve. A crystal is never a free pass through the deep.
+ */
+export const ORE_HARDNESS: [number, number] = [0.35, 1.6];
+export function tileHardness(tile: number): number | null {
+  const home = HOME_ROCK.get(tile);
+  if (home === undefined) return null;
+  return Math.min(ORE_HARDNESS[1], Math.max(ORE_HARDNESS[0], TILES[tile].hp / home));
 }
 
 /**

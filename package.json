@@ -23,7 +23,8 @@
     "qa": "node tools/qa/shot.mjs tools/qa/out basic",
     "dist:mac": "npm run build && electron-builder --mac --publish never",
     "build:demo": "tsc --noEmit && VITE_DEMO=1 vite build",
-    "dist:demo": "npm run build:demo && electron-builder --linux --win --mac --publish never -c.productName=\"Glimmerdeep Demo\" -c.appId=com.hearthmoorgames.glimmerdeep.demo -c.directories.output=release-demo"
+    "dist:demo": "npm run build:demo && electron-builder --linux --win --mac --publish never -c.productName=\"Glimmerdeep Demo\" -c.appId=com.hearthmoorgames.glimmerdeep.demo -c.directories.output=release-demo",
+    "sim:boons": "vite-node tools/sim/boons.ts"
   },
   "dependencies": {
     "phaser": "3.90.0",

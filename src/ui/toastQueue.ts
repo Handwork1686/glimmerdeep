@@ -28,8 +28,8 @@ export const achievementToast = (a: AchievementDef): Toast => ({ kind: 'achievem
  * screen bottom (the Lv / XP bar lives below that), clear of the currency row, the
  * Workshop's purchase panel and the chain counter.
  */
-export const TOAST_W = 148;
-export const TOAST_H = 34;
+export const TOAST_W = 200;
+export const TOAST_H = 40;
 export const TOAST_BOTTOM_GAP = 34;
 export const TOAST_Y = VIEW_H - TOAST_BOTTOM_GAP - TOAST_H;
 

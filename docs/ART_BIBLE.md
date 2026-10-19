@@ -51,11 +51,12 @@ There are 13 ramps of 5 steps each (65 colours). Each ramp runs from dark to lig
 | fossil | spirals |
 | fire opal | cabochons |
 | ember | molten cracks |
+| faultstone | a jagged brown fissure with copper glints in grey stone (it throws fault shards) |
 
 ## 5. Characters
 - **The Wick** is 22×19. Its design: a copper dome hull, a teal porthole with the pilot's eye-glow, an angler-style lantern arm, and treads. Animations: idle (2 frames, with lantern flicker), move (4 frames, with tread scroll and lantern swing) and fly (2 frames). The drill bit is a separate 3-frame sprite, rotated to the drilling direction.
 - **Relics** are 12×12 hand-placed pixel maps with a 1 px `void0` outline, one bright read colour each, so they pop out of the Codex grid.
-- **Seals** are slabs of dark teal stone with glowing runes; geodes are a grey crust with violet crystal peeking through; the World's Heart is pure `light` ramp.
+- **Rune ribbons** (the old seals) are slabs of dark teal stone with glowing runes, in a 2-row ribbon with gaps; geodes are a grey crust with violet crystal peeking through; the World's Heart is pure `light` ramp.
 
 ## 6. Decor
 - Each biome has 3–4 floor pieces and 3 ceiling pieces: roots, stalactites, crystal clusters, mushrooms, vents and tendrils.
@@ -74,7 +75,7 @@ There are 13 ramps of 5 steps each (65 colours). Each ramp runs from dark to lig
   | Type | Silhouette | Tint |
   |---|---|---|
   | Glass | long thin needle | ice white `c8ecff` |
-  | Crystal | elongated diamond | teal `5fe0c4` |
+  | Crystal | elongated diamond | blue `72aef2` |
   | Ember | round head with a broken tail (a comet) | ember `ff9a73` |
   | Cinnabar | chunky block with a point | red `f0564a` |
   | Geode | small hexagon | violet `b862de` |
@@ -83,7 +84,9 @@ There are 13 ramps of 5 steps each (65 colours). Each ramp runs from dark to lig
   | Cataclysm | four-point star | gold `ffd877` |
   | Void | crescent | deep violet `8034a6` |
   | Prism | hollow wedge | pale gold `fff0b5` |
-  | Rune | square ring | blue `72aef2` |
+  | Rune | square ring | teal `5fe0c4` |
+- Every type also has its own **trail and size** (`Run.styleShard`), so a shard reads by motion as well as by silhouette and colour: glass is stretched into a long white streak; crystal leaves a blue line that fades behind it; ember throws orange sparks; cinnabar is big and trails smoke; geode glitters in three violets; vein flickers amber with a fading runner; fault sheds brown grit; a Cataclysm shard is huge and gold; void wobbles and leaves purple wisps; prism cycles its tint through the rainbow; rune turns in place and pulses teal. The particle budget is flat: the trails thin out as the air fills with shards.
+- Each type also has a short sound of its own (`shard_<type>` in `tools/audio/sfx.py`).
 - The Shard Bomb icon (`icon_shardbomb`) is a teal orb throwing white glints, and replaces the old flare icon.
 - **Rich ground** tints the backwall warm (`ffe2a0`) and scatters gold glints across the view.
 - Screen flashes are capped at 25–45% opacity and rate-limited to one per 350 ms. "Reduce flashes" turns them off.

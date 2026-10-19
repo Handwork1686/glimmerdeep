@@ -23,15 +23,40 @@ export class Bot {
 
   private rng: Rng;
 
+  /** boons the bot likes, best first (anything else, in hand order; never Overburn unless listed) */
+  boonPrefs: string[] = ['splinters', 'keenshards', 'gilded', 'kindling', 'shardlight', 'potluck', 'longfuse', 'overcharge', 'quickhands', 'glassharvest'];
+
   constructor(skill = 1, seed = 1234) {
     this.skill = skill;
     this.rng = new Rng(seed);
   }
 
+  /** balance experiments: skip any hand with nothing it likes, instead of taking something else */
+  skipUnliked = false;
+
+  /** pick a boon from a hand: the first it likes, else the first that is not a gamble ('' = skip the hand) */
+  pickBoon(sim: Sim): string {
+    const hand = sim.choices ?? [];
+    let best = -1;
+    let id = '';
+    for (const b of hand) {
+      const k = this.boonPrefs.indexOf(b.id);
+      if (k >= 0 && (best < 0 || k < best)) {
+        best = k;
+        id = b.id;
+      }
+    }
+    if (id) return id;
+    if (this.skipUnliked) return '';
+    return (hand.find((b) => b.id !== 'overburn') ?? hand[0]).id;
+  }
+
   think(sim: Sim): SimInput {
     const inp: SimInput = { ...NO_INPUT };
     if (sim.choices) {
-      sim.choose(sim.choices[0].id);
+      const id = this.pickBoon(sim);
+      if (id) sim.choose(id);
+      else sim.skipChoice();
       return inp;
     }
     const p = sim.player;

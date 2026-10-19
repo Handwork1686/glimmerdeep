@@ -5,18 +5,37 @@
  * A build is a shopping priority: the bot favours that playstyle's nodes.
  */
 import { Bot } from '../../src/core/bot';
-import { computeStats } from '../../src/core/progression';
-import { rockHp } from '../../src/core/progression';
+import { computeStats, rockHp } from '../../src/core/progression';
 import { Sim } from '../../src/core/sim';
 import { shardDepthScale } from '../../src/data/shards';
 import { costOf, isAvailable, UPGRADES } from '../../src/data/upgrades';
 import { bankRun } from '../../src/systems/bank';
 import { newSave } from '../../src/systems/save';
 
+import { BALANCE } from '../../src/data/balance';
+
+// experiments: BAL_ECON=9 BAL_ROCK=1.5 npm run sim ...
+for (const k of Object.keys(BALANCE) as (keyof typeof BALANCE)[]) {
+  const v = process.env[`BAL_${k.toUpperCase()}`];
+  if (v) BALANCE[k] = Number(v);
+}
 const args = process.argv.slice(2);
 const RUNS = Number(args.find((a) => !a.startsWith('--')) ?? 120);
 const BUILD = (args.find((a) => a.startsWith('--build='))?.split('=')[1] ?? 'balanced') as BuildId;
 const DIAG = !!process.env.DIAG;
+const SEED_OFFSET = Number(process.env.SIM_SEED ?? 0);
+/** --boons=<family>: the bot always takes boons from this family first (to see whether any family is an auto-pick or an auto-skip) */
+const BOON_FAMILIES: Record<string, string[]> = {
+  money: ['gilded', 'luckystrike', 'potluck', 'deeppockets', 'midastouch'],
+  shard: ['splinters', 'keenshards', 'piercing', 'shrapnel', 'prismheart', 'supernova', 'ricochet', 'faultline', 'rupture'],
+  lantern: ['kindling', 'shardlight', 'lanternnova', 'secondwind'],
+  drill: ['overcharge', 'quickhands', 'widebit', 'echo', 'redhot', 'seismic'],
+  chain: ['longfuse', 'echochain', 'glassharvest', 'potluck'],
+  burn: ['overburn', 'keenshards', 'splinters'],
+};
+/** --grant=a,b: every dig starts with these boons (one stack each), and every other boon hand is skipped: each boon's own worth */
+const GRANT = args.find((a) => a.startsWith('--grant='))?.split('=')[1]?.split(',') ?? [];
+const BOON_FAMILY = args.find((a) => a.startsWith('--boons='))?.split('=')[1];
 const CAMP_OVERHEAD = 25; // seconds spent in the workshop per run
 const save = newSave();
 const stallGaps: number[] = [];
@@ -49,13 +68,15 @@ function priority(id: string, branch: string): number {
 /** hits to break plain rock at a depth: the drill, and one shard, for the stats a build has when it first gets there */
 function hitsAt(depth: number) {
   const st = computeStats(save.upgrades);
-  const hp = rockHp(depth);
+  const hp = rockHp(depth) * BALANCE.rock;
   return {
     drill: Math.ceil(hp / (st.drillPower * st.rockMul)),
-    shard: Math.ceil(hp / (st.shardDamage * shardDepthScale(depth) * st.rockMul)),
+    shard: Math.ceil(hp / (st.shardDamage * BALANCE.shardDmg * shardDepthScale(depth) * st.rockMul)),
   };
 }
 const bandTimes: Record<number, number> = {};
+/** seconds the first run that got through a band spent crossing it (from the 100 m above) */
+const bandPass: Record<number, number> = {};
 const bandHits: Record<number, { drill: number; shard: number }> = {};
 const totalBreaks: Record<string, number> = {};
 const drainSplit = { chainT: 0, chainFuel: 0, freeT: 0, freeFuel: 0 };
@@ -87,16 +108,37 @@ function shop() {
 
 for (let r = 0; r < RUNS; r++) {
   // every dig starts at the surface; claimed layer milestones stay claimed
-  const sim = new Sim({ seed: 1000 + r, upgrades: save.upgrades, relics: save.relics, milestones: save.milestones, gloom: 0 });
+  const sim = new Sim({ seed: 1000 + SEED_OFFSET + r, upgrades: save.upgrades, relics: save.relics, milestones: save.milestones, gloom: 0 });
   const bot = new Bot();
+  for (const id of GRANT) {
+    sim.choices = [];
+    sim.choose(id);
+    sim.choices = null;
+  }
+  if (GRANT.length) {
+    bot.skipUnliked = true;
+    bot.boonPrefs = [];
+  }
+  if (BOON_FAMILY) bot.skipUnliked = true;
+  if (BOON_FAMILY) bot.boonPrefs = BOON_FAMILY.startsWith('only:') ? BOON_FAMILY.slice(5).split(',') : BOON_FAMILIES[BOON_FAMILY];
   let steps = 0;
   const breaks: number[] = [];
   const diag: Record<string, number> = {};
   let frontierT = 0;
+  const runBand: Record<number, number> = {};
+  let nextBand = 100;
   while (!sim.over && steps < 60 * 900) {
+    while (sim.maxDepth >= nextBand) {
+      runBand[nextBand] = sim.time;
+      nextBand += 100;
+    }
     if (sim.pendingLevels > 0) {
       const h = sim.openChoice();
-      if (h && h.length) sim.choose(h[0].id);
+      if (h && h.length) {
+        const id = bot.pickBoon(sim);
+        if (id) sim.choose(id);
+        else sim.skipChoice();
+      }
     }
     sim.step(bot.think(sim));
     for (const e of sim.drainEvents()) if (e.t === 'break') {
@@ -116,6 +158,7 @@ for (let r = 0; r < RUNS; r++) {
   for (const [k, v] of Object.entries(sim.breaksBy)) totalBreaks[k] = (totalBreaks[k] ?? 0) + v;
   for (const k of Object.keys(drainSplit) as (keyof typeof drainSplit)[]) drainSplit[k] += sim.drainSplit[k];
   for (let band = 100; band <= 1500; band += 100) {
+    if (sum.maxDepth >= band && bandPass[band] === undefined) bandPass[band] = runBand[band] - (runBand[band - 100] ?? 0);
     if (sum.maxDepth >= band && bandTimes[band] === undefined) {
       bandTimes[band] = clock;
       bandHits[band] = hitsAt(band);
@@ -145,16 +188,24 @@ for (let r = 0; r < RUNS; r++) {
 console.log(`\nbuild: ${BUILD}`);
 console.log('milestones (minutes):');
 for (const [k, v] of Object.entries(milestones)) console.log(`  ${k.padEnd(22)} ${(v / 60).toFixed(1)}`);
-console.log('time to each 100 m band (minutes) | plain-rock hits to break: drill / one shard');
-let prevT = 0;
-let fastest = 0;
+console.log('time to each 100 m band (minutes), seconds the first pass spent crossing it | plain-rock hits to break: drill / one shard');
 for (const band of Object.keys(bandTimes).map(Number)) {
   const t = bandTimes[band] / 60;
   const h = bandHits[band];
-  console.log(`  ${String(band).padStart(5)} m  ${t.toFixed(1).padStart(6)}  (+${(t - prevT).toFixed(1).padStart(5)})  ${String(h.drill).padStart(4)} / ${String(h.shard).padStart(4)}${h.drill <= 1 ? '  ONE-HIT DRILL' : ''}`);
-  fastest = Math.max(fastest, prevT > 0 ? (t - prevT) / Math.max(0.1, prevT) : 0);
-  prevT = t;
+  console.log(`  ${String(band).padStart(5)} m  ${t.toFixed(1).padStart(6)}  pass ${String(Math.round(bandPass[band])).padStart(4)} s  ${String(h.drill).padStart(4)} / ${String(h.shard).padStart(4)}${h.drill <= 1 ? '  ONE-HIT DRILL' : ''}`);
 }
+// the brief's shape rule: no band is crossed 5x faster than the one before it
+let worst = Infinity;
+let worstBand = 0;
+const bands = Object.keys(bandPass).map(Number).sort((a, b) => a - b);
+for (let i = 1; i < bands.length; i++) {
+  const k = bandPass[bands[i]] / Math.max(1, bandPass[bands[i - 1]]);
+  if (k < worst) {
+    worst = k;
+    worstBand = bands[i];
+  }
+}
+console.log(`fastest band vs the one before: x${(1 / worst).toFixed(1)} faster (${worstBand} m)${1 / worst > 5 ? '  <- BREAKS THE 5x RULE' : ''}`);
 const oneHit = Object.keys(bandHits).map(Number).find((b) => bandHits[b].drill <= 1);
 console.log(`first one-hit drill depth: ${oneHit ?? 'none before the Heart'}`);
 const brk = Object.entries(totalBreaks).map(([k, v]) => `${k} ${v}`).join(', ');

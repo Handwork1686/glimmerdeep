@@ -3,11 +3,13 @@
  * it, bots and tests drive it headless.
  */
 import { SKY_ROWS, STEP, TILE } from '../config';
+import { BALANCE } from '../data/balance';
 import { biomeAt, SEAL_ROWS, SEALS } from '../data/biomes';
 import { BOON_BY_ID, BoonDef, BOONS } from '../data/boons';
 import { BASE_SHARD_DAMAGE, MAX_ACTIVE_SHARDS, MAX_PER_BURST, SHARD_BY_ID, ShardId, shardDepthScale } from '../data/shards';
 import { ItemKind, T, TILES } from '../data/tiles';
 import { computeStats, GloomMods, gloomMods, rockHp, hpCurve, rollBoons, xpForLevel } from './progression';
+import { tileHardness } from './rock';
 import { MILESTONE_FUEL } from './constants';
 import { Rng } from './rng';
 import { Stats } from './stats';
@@ -240,6 +242,7 @@ export const CATACLYSM_WARN = 0.5;
 export const SHARD_FUEL_CAP = 2;
 /** Overburn: this long, at twice the burn and twice the shard damage */
 export const OVERBURN_SECONDS = 30;
+export const OVERBURN_DRILL = 2.5;
 /** Echo Chain: a chain this long echoes, a second later, and never within this many seconds of another echo */
 export const ECHO_CHAIN = 20;
 export const ECHO_DELAY = 1;
@@ -302,6 +305,7 @@ export class Sim {
   chainTimer = 0;
   bestChain = 0;
   chainLinksForResonance = 0;
+  private chainLinksForKindled = 0;
   chainLinksForCataclysm = 0;
   /** gold mined during the current chain: paid out x multiplier when it ends */
   potGold = 0;
@@ -343,6 +347,7 @@ export class Sim {
   private echoAt = { x: 0, y: 0 };
   /** when an echo shard last broke something (no echo of an echo) */
   private echoLastT = -99;
+  private echoChainLen = 0;
   /** an echo shard broke something during this chain: the chain cannot echo */
   private echoInChain = false;
   echoesFired = 0;
@@ -424,8 +429,16 @@ export class Sim {
     const def = TILES[tile];
     if (def.unbreakable || def.hp <= 0) return def.hp;
     const depth = depthOfRow(row);
-    if (tile === T.seal) return rockHp(depth) * 1.2 * this.gloom.rockMul;
-    return def.hp * hpCurve(depth) * this.gloom.rockMul;
+    if (tile === T.seal) return rockHp(depth) * 1.2 * this.gloom.rockMul * BALANCE.rock;
+    const h = tileHardness(tile);
+    // ore keeps its toughness relative to the rock of its layer, along the same smooth curve; plain rock averages rockHp
+    if (h !== null) return rockHp(depth) * h * this.gloom.rockMul * BALANCE.rock;
+    return def.hp * hpCurve(depth) * this.gloom.rockMul * BALANCE.rock;
+  }
+
+  /** gold scale at a depth: the global dial, flattened a little the deeper you are */
+  goldDepth(depth: number): number {
+    return BALANCE.gold / (1 + BALANCE.goldFlat * Math.pow(Math.max(0, depth) / 600, 2));
   }
 
   /** below the Heart, ore keeps getting richer the deeper it lies */
@@ -484,7 +497,7 @@ export class Sim {
   /** fuel burned per second right now (depth, pressure, stall and Last Light included) */
   drainRate(): number {
     // drain reductions stack, but never below DRAIN_FLOOR: the deep always bites
-    let drain = Math.max(DRAIN_FLOOR, this.stats.lightDrain) * this.gloom.drainMul * drainCurve(this.depth()) * this.stallMul * this.throughputMul();
+    let drain = Math.max(DRAIN_FLOOR, this.stats.lightDrain) * this.gloom.drainMul * BALANCE.drain * drainCurve(this.depth()) * this.stallMul * this.throughputMul();
     if (this.stats.lastLight && this.lightFrac() < 0.25) drain *= 0.5;
     if (this.overburnT > 0) drain *= 2;
     return drain;
@@ -586,7 +599,7 @@ export class Sim {
         count = 1;
       }
       if (this.stats.midas && (def.drop.kind === 'copper' || def.drop.kind === 'silver' || def.drop.kind === 'tin')) per *= 3;
-      const goldMul = this.stats.goldMul * this.valueScale(depth) * (1 + this.stats.deepPockets * depth / 100) * this.gloom.goldMul * this.engineGold();
+      const goldMul = this.goldDepth(depth) * this.stats.goldMul * this.valueScale(depth) * (1 + this.stats.deepPockets * depth / 100) * this.gloom.goldMul * this.engineGold();
       for (let k = 0; k < count; k++) this.spawnPickup(def.drop.kind, cx, cy, { gold: per * goldMul });
       if (this.chain > 0) this.potGold += per * goldMul * count;
       this.ores[def.drop.kind] = (this.ores[def.drop.kind] ?? 0) + count;
@@ -603,7 +616,7 @@ export class Sim {
       this.spawnPickup('orb', cx, cy, { light: def.light * mul });
     }
     if (!def.ore && !def.light && this.stats.midasTouch > 0 && this.rng.chance(this.stats.midasTouch)) {
-      const g = (3 + depth * 0.25) * this.stats.goldMul;
+      const g = (3 + depth * 0.25) * this.goldDepth(depth) * this.stats.goldMul;
       this.spawnPickup('gold', cx, cy, { gold: g });
       if (this.chain > 0) this.potGold += g;
     }
@@ -697,6 +710,10 @@ export class Sim {
     // long chains refuel a little less per link, so a dig still ends
     this.addLight(chainRefuel(this.stats.chainFuel, this.chain, this.depth()), 'chain');
     this.emit({ t: 'chainLink', count: this.chain });
+    if (this.stats.kindledTick > 0 && ++this.chainLinksForKindled >= 20) {
+      this.chainLinksForKindled = 0;
+      this.addLight(this.stats.kindledTick * deepTaper(this.depth()) / (1 + this.chain / 1500), 'kindled');
+    }
     if (this.stats.resonance > 0) {
       this.chainLinksForResonance++;
       if (this.chainLinksForResonance >= 10) {
@@ -732,6 +749,7 @@ export class Sim {
       this.time - this.echoLastT > ECHO_COOLDOWN && !this.shards.some((s) => s.echo)
     ) {
       this.echoT = ECHO_DELAY;
+      this.echoChainLen = this.chain;
       this.echoAt = { x: this.player.x, y: this.player.y };
     }
     this.chain = 0;
@@ -745,7 +763,7 @@ export class Sim {
     const { x, y } = this.echoAt;
     this.echoesFired++;
     this.emit({ t: 'echo', x, y });
-    const n = this.spawnShards(x, y, 'glass', 12, { exact: true, gen: 1 });
+    const n = this.spawnShards(x, y, 'glass', Math.min(28, 14 + Math.floor(this.echoChainLen / 10)), { exact: true, gen: 1, power: BASE_SHARD_DAMAGE * 1.5 });
     for (const s of this.shards.slice(this.shards.length - n)) s.echo = true;
   }
 
@@ -755,7 +773,7 @@ export class Sim {
     const p = this.player;
     this.emit({ t: 'lanternNova', x: p.x, y: p.y });
     this.spawnShards(p.x, p.y, 'glass', 18, { exact: true, power: BASE_SHARD_DAMAGE * 2.5 });
-    this.addLight(15 * deepTaper(this.depth()), 'lanternnova');
+    this.addLight(this.stats.maxLight * 0.3 * deepTaper(this.depth()), 'lanternnova');
   }
 
   private findRelic(k: number, cx: number, cy: number) {
@@ -773,7 +791,7 @@ export class Sim {
   private ribbonBreak(x: number, y: number, cx: number, cy: number, depth: number, gen: number) {
     const sl = SEALS.find((r) => depth >= r.depth && depth < r.depth + SEAL_ROWS);
     if (sl) this.ribbonsHit.add(sl.depth);
-    const g = (6 + depth * 0.06) * this.stats.goldMul * this.gloom.goldMul;
+    const g = (6 + depth * 0.06) * this.goldDepth(depth) * this.stats.goldMul * this.gloom.goldMul;
     this.spawnPickup('gold', cx, cy, { gold: g });
     if (this.chain > 0) this.potGold += g;
     if (this.rng.chance(0.6)) this.spawnShards(cx, cy, 'rune', 1, { gen });
@@ -866,6 +884,7 @@ export class Sim {
     if (!o.flat) dmg *= shardDepthScale(depth);
     if (id === 'cinnabar') dmg *= s.cinnabarMul;
     if (this.overburnT > 0) dmg *= 2;
+    dmg *= BALANCE.shardDmg;
     const full = (o.spread ?? Math.PI * 2) >= Math.PI * 2 - 1e-6;
     const a0 = o.angle ?? this.rng.range(0, Math.PI * 2);
     for (let k = 0; k < n; k++) {
@@ -1370,7 +1389,7 @@ export class Sim {
       } else {
         // the bit heats up while it keeps chewing, and spins faster
         p.heat = Math.min(1, p.heat + dt * 0.9);
-        const rate = s.drillRate * (1 + p.heat * s.heatMax);
+        const rate = s.drillRate * (1 + p.heat * s.heatMax) * (this.overburnT > 0 ? OVERBURN_DRILL : 1);
         const mult = def.ore ? s.oreMul : s.rockMul;
         const left = this.world.hp(tx, ty);
         if (p.plowCd <= 0 && left <= s.drillPower * s.plow * mult * 0.5) {

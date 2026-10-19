@@ -1,4 +1,5 @@
 import type { Stats } from '../core/stats';
+import { BALANCE } from './balance';
 
 export type Branch = 'core' | 'light' | 'drill' | 'hull' | 'shatter' | 'fortune' | 'arcana' | 'world';
 
@@ -180,12 +181,12 @@ export const UPGRADE_BY_ID: Record<string, UpgradeNode> = Object.fromEntries(UPG
 
 const TIER_MUL = [1, 1, 1, 1.3, 2.5, 6];
 /** global price scale: peaceful digs last longer and mine more than the old fights allowed */
-export const ECON = 6;
+export const ECON = 12;
 
 export function costOf(node: UpgradeNode, level: number, costMul = 1): Cost {
   const f = Math.pow(node.growth, level) * (node.infinite ? 1 : TIER_MUL[Math.min(5, node.pos[0])]);
   return {
-    gold: Math.round(node.base.gold * f * costMul * ECON),
+    gold: Math.round(node.base.gold * f * costMul * BALANCE.econ),
     gems: node.base.gems ? Math.ceil(node.base.gems * Math.pow(1.5, level)) : 0,
     cores: node.base.cores ?? 0,
   };

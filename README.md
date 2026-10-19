@@ -5,8 +5,9 @@
 A peaceful incremental mining game for Steam:
 - Digs last 2–6 minutes, and nothing down there can hurt you.
 - Everything good underground is a shard source: crystals, embers, cinnabar, geodes, veins. Hit them and the screen erupts; chains of shards fill a pot that pays out multiplied when the streak ends.
-- An open world: dig as far left or right as you like, and down as far as it goes. Every dig starts at the surface; seals you break stay broken.
+- An open world: dig as far left or right as you like, and down as far as it goes. Every dig starts at the surface. Layers blend into each other and nothing is a wall: your lantern, your drill and your shards decide how deep you get.
 - Seven layers to the World's Heart, 22 ores, 11 shard types, geodes, 24 relics and a Codex.
+- Board clears (Surge, Prism Nova, Cataclysm) and active lantern boons you actually want to pick.
 - A 78-node upgrade web with seven playstyles (including upgrading the world itself) and no ceiling.
 - About 2.5–3 hours to the credits, then endless depths and ten Deep Pressure tiers.
 
@@ -29,7 +30,7 @@ npm run dev            # http://localhost:5173 (browser)
 npm run electron       # desktop window
 npm test               # unit tests
 npm run dist:linux     # packaged build in release/
-npm run dist:demo      # Next Fest demo (ends at the first Strata Seal) in release-demo/
+npm run dist:demo      # Next Fest demo (ends at 300 m) in release-demo/
 ```
 **Controls**
 
@@ -48,7 +49,7 @@ Every key can be rebound in Settings → Controls.
 |---|---|
 | `npm run art` | `public/assets/` atlas, tileset, backgrounds and fonts. Palette-audited. |
 | `python3 tools/art/store.py` | Steam capsules, library art and app icon |
-| `npm run audio` | 44 sound-effect sets, the 11-track soundtrack and 7 ambience beds (OGG) |
+| `npm run audio` | 58 sound-effect sets, the 11-track soundtrack and 7 ambience beds (OGG) |
 | `npm run sim -- 200` | Balance simulation over 200 bot descents |
 | `node tools/qa/soak.mjs` | Browser soak test, run against `npm run dev` |
 | `bash tools/qa/trailer_capture.sh && python3 tools/qa/trailer.py` | `store/trailer.mp4` |
@@ -56,9 +57,9 @@ Every key can be rebound in Settings → Controls.
 ## Layout
 ```
 src/core/      deterministic simulation (no Phaser): sim, worldgen, bot, progression
-src/data/      tuning tables: tiles, biomes, seals, upgrades, boons, relics, strings, credits
+src/data/      tuning tables: tiles, biomes, rune ribbons, upgrades, boons, relics, balance dials, strings, credits
 src/scenes/    Phaser scenes: Boot, Title, Camp (workshop), Run, Hud, Results, Codex, Settings, Pause, Credits, Achievements, Ending
-src/systems/   save (versioned + migrations), controls (rebinding, gamepad), audio, achievements, banking
+src/systems/   save (versioned; an older save is discarded for a fresh one), controls (rebinding, gamepad), audio, achievements, banking
 electron/      desktop shell + Steam bridge (steamworks.js)
 tools/         art / audio / sim / QA pipelines
 ```

@@ -16,6 +16,8 @@ import { DemoEndScene } from './scenes/DemoEnd';
 import { Save } from './systems/save';
 import { Controls } from './systems/controls';
 import { Audio } from './systems/audio';
+import { unlock } from './systems/achievements';
+import { pushToast } from './ui/toasts';
 
 Save.load();
 Controls.attach();
@@ -57,3 +59,6 @@ window.addEventListener('blur', () => game.sound.pauseAll());
 window.addEventListener('focus', () => game.sound.resumeAll());
 
 (window as unknown as { __game: Phaser.Game }).__game = game;
+
+// QA hooks for the browser checks (dev builds only)
+if (import.meta.env.DEV) (window as unknown as { __qa: unknown }).__qa = { Save, unlock, pushToast };
