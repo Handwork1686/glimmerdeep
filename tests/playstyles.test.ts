@@ -6,7 +6,7 @@ import { CHUNK, GenContext, generateChunk, NO_PROSPECT, Prospect, rowOfDepth } f
 import { T, TILES } from '../src/data/tiles';
 import { BRANCH_HINT, UPGRADES } from '../src/data/upgrades';
 
-const ctx = (seed: number): GenContext => ({ seed, sealsBroken: new Set(), relics: [], doneLayers: new Set() });
+const ctx = (seed: number): GenContext => ({ seed, relics: [], doneLayers: new Set() });
 /** count tiles matching `pred` over many chunks around 250-450 m */
 function census(p: Prospect, pred: (t: number) => boolean, seed = 31) {
   let n = 0;
@@ -74,7 +74,7 @@ describe('playstyles', () => {
   function breaks(upgrades: Record<string, number>) {
     let total = 0;
     for (const seed of [41, 42, 43]) {
-      const sim = new Sim({ seed, upgrades, sealsBroken: [300, 520], gloom: 0, debugDepth: 560 });
+      const sim = new Sim({ seed, upgrades, gloom: 0, debugDepth: 560 });
       const bot = new Bot();
       for (let i = 0; i < 60 * 40 && !sim.over; i++) {
         sim.light = sim.stats.maxLight;

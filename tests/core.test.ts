@@ -132,19 +132,19 @@ describe('simulation', () => {
       expect(sim.solidPx(p.x, p.y)).toBe(false);
     }
   });
-  it('a seal only yields to a drill with enough power, then shatters across', () => {
-    const weak = new Sim({ seed: 4, upgrades: { root: 1 }, gloom: 0 });
+  it('a rune ribbon breaks with the starter drill: it throws rune shards and gold, never blocks', () => {
+    const sim = new Sim({ seed: 4, upgrades: { root: 1 }, gloom: 0 });
     const row = rowOfDepth(SEALS[0].depth);
-    expect(weak.damageTile(0, row, 1e9, 'drill')).toBe(false);
-    expect(weak.damageTile(0, row, 1e9, 'shard')).toBe(false);
-    expect(weak.drainEvents().some((e) => e.t === 'sealDeny')).toBe(true);
-    const strong = new Sim({ seed: 4, upgrades: { root: 1, bit: 5, diamond: 2 }, gloom: 0 });
-    expect(strong.stats.drillPower).toBeGreaterThanOrEqual(SEALS[0].power);
-    expect(strong.damageTile(0, row, 1e9, 'drill')).toBe(true);
-    for (let i = 0; i < 120; i++) strong.step(NO_INPUT);
-    for (let x = -20; x <= 20; x++) expect(strong.tileAt(x, row)).toBe(T.air);
-    expect(strong.summary().seals).toBe(1);
-    expect(strong.summary().sealsBroken).toEqual([SEALS[0].depth]);
+    let x = 0;
+    while (sim.tileAt(x, row) !== T.seal) x++;
+    expect(sim.stats.drillPower).toBeLessThanOrEqual(2);
+    expect(sim.damageTile(x, row, 1e9, 'drill')).toBe(true);
+    expect(sim.tileAt(x, row)).toBe(T.air);
+    expect(sim.summary().seals).toBe(1);
+    // shards break it too
+    let y = 0;
+    while (sim.tileAt(y + 3, row) !== T.seal) y++;
+    expect(sim.damageTile(y + 3, row, 1e9, 'shard')).toBe(true);
   });
   it('a chain pays its pot out multiplied when it ends', () => {
     const sim = new Sim({ seed: 8, upgrades: { root: 1 }, gloom: 0 });

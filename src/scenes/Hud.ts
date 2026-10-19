@@ -247,11 +247,8 @@ export class HudScene extends Phaser.Scene {
         this.cashOut(e.bonus, e.mult, e.count);
         if (e.count >= 8) this.tip('chain');
         break;
-      case 'sealDeny':
-        this.tip('seal');
-        break;
-      case 'sealBreak':
-        this.showCard(S.cards.sealBroken, e.name);
+      case 'milestone':
+        this.showCard(`${S.cards.milestone}: ${e.name.toUpperCase()}`, '+5 max fuel, for good');
         break;
       case 'geode':
         this.tip('geode');
@@ -417,7 +414,6 @@ export class HudScene extends Phaser.Scene {
       this.homeText.setPosition(Math.round(ex), Math.round(ey + 10)).setText(deep ? `Heart ${dist} m` : `shaft ${dist} m`);
       if (far) this.tip('farOut');
     }
-    if (Save.data.sealsBroken.some((dep) => sim.depth() >= dep && sim.depth() < dep + 8)) this.tip('sealOpen');
     if (sim.world.rich(Math.floor(sim.player.x / 16), Math.floor(sim.player.y / 16))) this.tip('rich');
 
     // one-time contextual tips

@@ -1,5 +1,5 @@
 import { SKY_ROWS } from '../config';
-import { BIOMES, BiomeDef, biomeAt, HEART_CHAMBER, HEART_DEPTH, SEAL_ROWS, SEALS } from '../data/biomes';
+import { BIOMES, BiomeDef, biomeAt, blendAt, HEART_CHAMBER, HEART_DEPTH, SEAL_ROWS, SEALS } from '../data/biomes';
 import { RELICS } from '../data/relics';
 import { T, TILES } from '../data/tiles';
 import { fbm, hash2, Rng, valueNoise } from './rng';
@@ -50,10 +50,6 @@ export interface RelicSpot {
 /** Per-dig context: everything generation needs besides the seed and the chunk. */
 export interface GenContext {
   seed: number;
-  /** seal depths broken on earlier digs: they generate open */
-  sealsBroken: ReadonlySet<number>;
-  /** demo: the first seal never breaks (and never generates open) */
-  demo?: boolean;
   /** this dig's relic sites (one per unfound relic) */
   relics: readonly RelicSpot[];
   /** biome ids whose four relics are all found: relic rolls there become caches */
@@ -81,13 +77,10 @@ function biomeT(biome: BiomeDef, depth: number): number {
   return Math.min(1, Math.max(0, (depth - biome.from) / Math.max(1, span)));
 }
 
-/** the biome a cell belongs to (blending into the next one near a boundary) */
+/** the biome a cell belongs to: layers blend into each other over a band around each boundary */
 function cellBiome(seed: number, x: number, y: number): BiomeDef {
-  const depth = depthOfRow(y);
-  const biome = biomeAt(depth);
-  const next = BIOMES[BIOMES.indexOf(biome) + 1];
-  if (next && biome.to - depth < 6 && hash2(x, y, seed + 5) < (6 - (biome.to - depth)) / 9) return next;
-  return biome;
+  const { a, b, p } = blendAt(depthOfRow(y));
+  return b && hash2(x, y, seed + 5) < p ? b : a;
 }
 
 /** the stateless rock + cave layer: a pure function of position */
@@ -96,7 +89,7 @@ export function baseTile(seed: number, x: number, y: number, caves = 0): number 
   if (y === SKY_ROWS) return T.turf;
   const depth = depthOfRow(y);
   const b = cellBiome(seed, x, y);
-  const t = biomeT(biomeAt(depth), depth);
+  const t = biomeT(b, depth);
   let total = 0;
   for (const [, w0, w1] of b.base) total += w0 + (w1 - w0) * t;
   let n = fbm(x * 1.0, y * 1.25, seed + 11) * 1.25 - 0.12;
@@ -156,8 +149,8 @@ export function generateChunk(cx: number, cy: number, p: Prospect, ctx: GenConte
 
   // ---- 3. scatter specials & boulders above cave ceilings (stateless per cell)
   for (let y = Math.max(y0, SKY_ROWS + 3); y < y0 + CHUNK; y++) {
-    const biome = biomeAt(depthOfRow(y));
     for (let x = x0; x < x0 + CHUNK; x++) {
+      const biome = cellBiome(seed, x, y);
       const cur = get(x, y);
       if (cur === T.air || TILES[cur].ore || cur === T.geode || TILES[cur].shards) continue;
       const belowAir = baseTile(seed, x, y + 1, p.caves) === T.air;
@@ -188,13 +181,20 @@ export function generateChunk(cx: number, cy: number, p: Prospect, ctx: GenConte
     }
   }
 
-  // ---- 5. strata seals: in every chunk, so there is no way around them sideways
-  for (let i = 0; i < SEALS.length; i++) {
-    const s = SEALS[i];
-    const r0 = rowOfDepth(s.depth);
+  // ---- 5. rune ribbons at the old seal depths: breakable, with gaps, never a wall
+  for (const sl of SEALS) {
+    const r0 = rowOfDepth(sl.depth);
     if (r0 + SEAL_ROWS <= y0 || r0 >= y0 + CHUNK) continue;
-    const open = ctx.sealsBroken.has(s.depth) && !(ctx.demo && i === 0);
-    for (let y = r0; y < r0 + SEAL_ROWS; y++) for (let x = x0; x < x0 + CHUNK; x++) set(x, y, open ? T.air : T.seal);
+    for (let y = r0; y < r0 + SEAL_ROWS; y++) {
+      for (let x = x0; x < x0 + CHUNK; x++) {
+        if (ribbonGap(seed, sl.depth, x)) {
+          set(x, y, T.air);
+        } else {
+          const cur = get(x, y);
+          if (cur !== T.relic) set(x, y, T.seal);
+        }
+      }
+    }
   }
 
   // ---- 6. fixed stamps at the spawn column: the World's Heart chamber and the starter vein
@@ -211,12 +211,21 @@ export function generateChunk(cx: number, cy: number, p: Prospect, ctx: GenConte
   return { tiles, natural, rich: isRich(seed, cx, cy, p) };
 }
 
+/** gaps of one or two tiles every 4-7 tiles along a ribbon */
+export function ribbonGap(seed: number, depth: number, x: number): boolean {
+  const k = Math.floor(x / 6);
+  const off = Math.floor(hash2(k, depth, seed + 88) * 6);
+  const len = hash2(k, depth, seed + 89) < 0.5 ? 1 : 2;
+  const r = x - k * 6 - off;
+  return r >= 0 && r < len;
+}
+
 const GEM_FOR: Record<string, number> = {
   rootsoil: T.fossil, amberstone: T.fossil, grotto: T.sapphire, emberdeep: T.ruby, hollow: T.prism, mantle: T.emerald, heart: T.prism,
 };
 
 /** ore veins seeded by origin chunk (ox, oy): random walks of at most 12 steps */
-function drawVeins(seed: number, ox: number, oy: number, p: Prospect, rich: boolean, plot: (x: number, y: number, ore: number) => void) {
+function drawVeins(seed: number, ox: number, oy: number, p_: Prospect, rich: boolean, plot: (x: number, y: number, ore: number) => void) {
   const rng = new Rng(chunkHash(ox, oy, seed ^ 0x51ed));
   // a per-chunk lean: veins in some regions run more sideways, in others more down
   const lean = rng.range(-0.15, 0.15);
@@ -226,28 +235,33 @@ function drawVeins(seed: number, ox: number, oy: number, p: Prospect, rich: bool
     const gy = oy * CHUNK + g * 8;
     const depth = depthOfRow(gy + 4);
     if (depth < 0) continue;
-    const biome = biomeAt(depth);
-    const t = biomeT(biome, depth);
-    for (const ore of biome.ores) {
-      if (ore.minT !== undefined && t < ore.minT) continue;
-      let per = ore.perBand * AREA * (1 + p.ores * (GEM_ORES.has(ore.tile) ? 1.5 : 1));
-      if (SHARD_SOURCES.has(ore.tile)) per *= 1 + p.shards;
-      if (rich) per *= 2;
-      // early game: generous copper near the surface
-      if (depth < 20 && ore.tile === T.copper) per += 2 * AREA;
-      let count = Math.floor(per);
-      if (rng.chance(per - count)) count++;
-      for (let k = 0; k < count; k++) {
-        let x = ox * CHUNK + rng.int(0, CHUNK - 1);
-        let y = gy + rng.int(0, 7);
-        const len = Math.min(12, rng.int(ore.len[0], ore.len[1]) + (p.ores > 0 && rng.chance(Math.min(1, p.ores)) ? 1 : 0));
-        for (let s = 0; s < len; s++) {
-          plot(x, y, ore.tile);
-          const r = rng.next();
-          if (r < 0.25 + lean) x++;
-          else if (r < 0.5) x--;
-          else if (r < 0.75) y++;
-          else y += rng.chance(0.5) ? 1 : -1;
+    const { a, b, p } = blendAt(depth);
+    const cands: [BiomeDef, number][] = b ? [[a, 1 - p], [b, p]] : [[a, 1]];
+    for (const [biome, share] of cands) {
+      if (share <= 0.001) continue;
+      const t = biomeT(biome, depth);
+      for (const ore of biome.ores) {
+        if (ore.minT !== undefined && t < ore.minT) continue;
+        let per = ore.perBand * AREA * (1 + p_.ores * (GEM_ORES.has(ore.tile) ? 1.5 : 1));
+        if (SHARD_SOURCES.has(ore.tile)) per *= 1 + p_.shards;
+        if (rich) per *= 2;
+        // early game: generous copper near the surface
+        if (depth < 20 && ore.tile === T.copper) per += 2 * AREA;
+        per *= share;
+        let count = Math.floor(per);
+        if (rng.chance(per - count)) count++;
+        for (let k = 0; k < count; k++) {
+          let x = ox * CHUNK + rng.int(0, CHUNK - 1);
+          let y = gy + rng.int(0, 7);
+          const len = Math.min(12, rng.int(ore.len[0], ore.len[1]) + (p_.ores > 0 && rng.chance(Math.min(1, p_.ores)) ? 1 : 0));
+          for (let s = 0; s < len; s++) {
+            plot(x, y, ore.tile);
+            const r = rng.next();
+            if (r < 0.25 + lean) x++;
+            else if (r < 0.5) x--;
+            else if (r < 0.75) y++;
+            else y += rng.chance(0.5) ? 1 : -1;
+          }
         }
       }
     }
@@ -263,7 +277,7 @@ function drawGeode(seed: number, ox: number, oy: number, p: Prospect, rich: bool
   if (!rng.chance(clampP(chance))) return;
   const cy = oy * CHUNK + rng.int(4, CHUNK - 5);
   if (cy < SKY_ROWS + 40) return;
-  const biome = biomeAt(depthOfRow(cy));
+  const biome = cellBiome(seed, ox * CHUNK, cy);
   const rx = rng.int(3, 5) + 0.5;
   const ry = rng.int(2, 3) + 0.5;
   const cx = ox * CHUNK + rng.int(4, CHUNK - 5);

@@ -2,7 +2,6 @@ import Phaser from 'phaser';
 import { DEMO, VIEW_H, VIEW_W } from '../config';
 import { BIOMES, HEART_DEPTH, SEALS } from '../data/biomes';
 import { RELIC_BY_ID } from '../data/relics';
-import { computeStats } from '../core/progression';
 import { S as STR } from '../data/strings';
 import { BOON_BY_ID, RARITY_COLOR } from '../data/boons';
 import type { RunSummary } from '../core/sim';
@@ -86,7 +85,7 @@ export class ResultsScene extends Phaser.Scene {
     const notes: string[] = [];
     for (const id of r.relics) notes.push(`Relic: ${RELIC_BY_ID[id]?.name ?? id}`);
     if (this.bank.newPressure) notes.push(`Deep Pressure ${this.bank.newPressure} unlocked`);
-    for (const dep of r.sealsBroken) notes.push(`${SEALS.find((s) => s.depth === dep)?.name ?? 'A seal'} stays broken`);
+    for (const id of r.milestones) notes.push(`${BIOMES.find((b) => b.id === id)?.name ?? 'A new layer'} reached: +5 max fuel`);
     // depth bar: the five biomes, this descent and the record
     const bx = 60;
     const bw = 360;
@@ -115,17 +114,11 @@ export class ResultsScene extends Phaser.Scene {
     this.input.on('pointerdown', () => this.advance());
   }
 
-  /** the next seal you cannot break yet, or the Heart, or the endless deep */
+  /** the next thing to dig toward: the record, the Heart, or the endless deep */
   private nextGoal(): string {
     const save = Save.data;
     if (save.stats.hearts > 0) return STR.results.nextEndless;
-    const power = computeStats(save.upgrades, {}, save.relics).drillPower;
-    for (const sl of SEALS) {
-      if (save.maxDepth < sl.depth + 4) {
-        if (power < sl.power) return STR.results.nextSeal.replace('{name}', sl.name).replace('{depth}', String(sl.depth)).replace('{power}', String(sl.power));
-        return STR.results.nextDepth.replace('{depth}', String(save.maxDepth));
-      }
-    }
+    if (save.maxDepth < 400) return STR.results.nextDepth.replace('{depth}', String(save.maxDepth));
     return save.maxDepth < HEART_DEPTH ? STR.results.nextHeart : STR.results.nextEndless;
   }
 

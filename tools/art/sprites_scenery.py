@@ -449,12 +449,4 @@ def standalone() -> dict[str, Canvas]:
 def build() -> dict[str, Canvas]:
     """Small scenery sprites that live in the atlas."""
     f: dict[str, Canvas] = {}
-    # drone (2 frames)
-    for i in range(2):
-        cv = Canvas(9, 7)
-        cv.ellipse(4, 3.5, 3.2, 2.5, "silver2")
-        cv.ellipse(3.6, 3, 1.8, 1.2, "silver3")
-        cv.px(4, 3, "teal4"); cv.px(5, 3, "teal2")
-        cv.px(0 if i == 0 else 1, 1, "stone3"); cv.px(8 if i == 0 else 7, 1, "stone3")
-        f[f"drone_{i}"] = cv.outline("void0")
     return f

@@ -1,12 +1,12 @@
 /**
- * Versioned save data with forward migrations. Storage goes through a small
+ * Versioned save data. A save from an older version is discarded for a fresh
+ * one (settings are kept); there are no migrations. Storage goes through a small
  * backend so the Electron build can write files (Steam Cloud) while the web
  * build uses localStorage.
  */
 import { DEMO } from '../config';
-import { SEAL_ROWS, SEALS } from '../data/biomes';
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 const KEY = DEMO ? 'glimmerdeep.demo.save' : 'glimmerdeep.save';
 
 export type Action = 'left' | 'right' | 'up' | 'down' | 'shardbomb' | 'bomb' | 'pause' | 'confirm' | 'back';
@@ -34,8 +34,8 @@ export interface SaveData {
   cores: number;
   upgrades: Record<string, number>;
   maxDepth: number;
-  /** depths of the Strata Seals broken so far: they stay broken on every dig */
-  sealsBroken: number[];
+  /** layers whose depth milestone has been claimed (biome ids) */
+  milestones: string[];
   gloom: number;
   maxGloom: number;
   seedCounter: number;
@@ -90,7 +90,7 @@ export function defaultSettings(): Settings {
 
 export function newSave(): SaveData {
   return {
-    version: SAVE_VERSION, gold: 0, gems: 0, cores: 0, upgrades: { root: 1 }, maxDepth: 0, sealsBroken: [],
+    version: SAVE_VERSION, gold: 0, gems: 0, cores: 0, upgrades: { root: 1 }, maxDepth: 0, milestones: [],
     gloom: 0, maxGloom: 0, seedCounter: 1,
     stats: {
       runs: 0, totalGold: 0, totalGems: 0, bombs: 0, bestChain: 0, playTime: 0, nodesBought: 0, longestRun: 0, mythics: 0, maxBoons: 0,
@@ -99,147 +99,6 @@ export function newSave(): SaveData {
     codex: {}, relics: [], achievements: {}, tips: {}, seenNodes: { root: true }, credits: false, settings: defaultSettings(),
   };
 }
-
-type Migration = (d: Record<string, unknown>) => Record<string, unknown>;
-const MIGRATIONS: Record<number, Migration> = {
-  // v1 -> v2: settings gained crt/showFps; stats gained endless
-  1: (d) => {
-    const s = (d.settings ?? {}) as Record<string, unknown>;
-    s.crt = s.crt ?? false;
-    s.showFps = s.showFps ?? false;
-    d.settings = s;
-    const st = (d.stats ?? {}) as Record<string, unknown>;
-    st.endless = st.endless ?? 0;
-    d.stats = st;
-    d.version = 2;
-    return d;
-  },
-  // v2 -> v3: the guardians and creatures are gone. Refund every upgrade that
-  // only made sense in a fight, drop combat stats, and let the new ending play.
-  2: (d) => {
-    const ups = (d.upgrades ?? {}) as Record<string, number>;
-    const refund = { gold: 0, gems: 0, cores: 0 };
-    for (const [id, o] of Object.entries(REMOVED_V3)) {
-      const lvl = Math.min(ups[id] ?? 0, 9);
-      for (let l = 0; l < lvl; l++) {
-        refund.gold += Math.round(o.gold * Math.pow(1.85, l) * o.tier);
-        refund.gems += o.gems ? Math.ceil(o.gems * Math.pow(1.5, l)) : 0;
-        refund.cores += o.cores ?? 0;
-      }
-      delete ups[id];
-    }
-    d.upgrades = ups;
-    d.gold = ((d.gold as number) ?? 0) + refund.gold;
-    d.gems = ((d.gems as number) ?? 0) + refund.gems;
-    d.cores = ((d.cores as number) ?? 0) + refund.cores;
-    delete d.defeated;
-    const st = (d.stats ?? {}) as Record<string, unknown>;
-    delete st.kills;
-    d.stats = st;
-    d.credits = false;
-    const ach = (d.achievements ?? {}) as Record<string, number>;
-    for (const id of ['coil_breaker', 'heartbreaker', 'lightbringer', 'pacifist', 'moth_bane', 'close_call', 'gloom5', 'gloom10']) delete ach[id];
-    d.achievements = ach;
-    d.version = 3;
-    return d;
-  },
-  // v3 -> v4: the lifts are gone (every dig starts at the surface) and broken
-  // seals stay broken. Having been below a seal's band proves it was broken.
-  3: (d) => {
-    delete d.stop;
-    const max = isNum(d.maxDepth) ? d.maxDepth : 0;
-    d.sealsBroken = sealsBelow(max);
-    d.version = 4;
-    return d;
-  },
-  // v4 -> v5: the Flare became the Shard Bomb (same keys, no upgrades of its
-  // own) and pickups always auto-collect. Refund the flare and magnet nodes in
-  // full, keep the player's own keys for the bomb, carry the throw count over.
-  4: (d) => {
-    const ups = isMap(d.upgrades) ? (d.upgrades as Record<string, unknown>) : {};
-    const refund = refundNodes(ups, REMOVED_V5);
-    d.upgrades = ups;
-    d.gold = (isNum(d.gold) ? d.gold : 0) + refund.gold;
-    d.gems = (isNum(d.gems) ? d.gems : 0) + refund.gems;
-    d.cores = (isNum(d.cores) ? d.cores : 0) + refund.cores;
-    const st = isMap(d.stats) ? d.stats : {};
-    if (isNum(st.flares)) st.bombs = st.flares;
-    delete st.flares;
-    d.stats = st;
-    const set = isMap(d.settings) ? d.settings : null;
-    if (set && isMap(set.bindings)) {
-      const b = set.bindings as Record<string, unknown>;
-      if (b.flare !== undefined) b.shardbomb = b.flare;
-      delete b.flare;
-    }
-    const tips = isMap(d.tips) ? d.tips : null;
-    if (tips) {
-      delete tips.flare;
-      delete tips.lift;
-    }
-    d.version = 5;
-    return d;
-  },
-};
-
-interface Snapshot {
-  gold: number;
-  gems?: number;
-  cores?: number;
-  growth: number;
-  /** ring tier multiplier at the time */
-  tier: number;
-  /** the price scale at the time */
-  econ: number;
-}
-
-/** refund every level of the removed nodes at the list price the player paid, and drop them */
-function refundNodes(ups: Record<string, unknown>, removed: Record<string, Snapshot>) {
-  const refund = { gold: 0, gems: 0, cores: 0 };
-  for (const [id, o] of Object.entries(removed)) {
-    const raw = ups[id];
-    const lvl = isNum(raw) ? Math.max(0, Math.min(Math.floor(raw), 9)) : 0;
-    for (let l = 0; l < lvl; l++) {
-      refund.gold += Math.round(o.gold * Math.pow(o.growth, l) * o.tier * o.econ);
-      refund.gems += o.gems ? Math.ceil(o.gems * Math.pow(1.5, l)) : 0;
-      refund.cores += o.cores ?? 0;
-    }
-    delete ups[id];
-  }
-  return refund;
-}
-
-/** v4 flare and magnet nodes, frozen as they were priced when removed */
-const REMOVED_V5: Record<string, Snapshot> = {
-  flarecd: { gold: 20, growth: 1.85, tier: 1, econ: 3.5 },
-  flarer: { gold: 60, growth: 1.85, tier: 1, econ: 3.5 },
-  flarep: { gold: 70, growth: 1.85, tier: 1, econ: 3.5 },
-  magnet: { gold: 35, growth: 1.85, tier: 1, econ: 3.5 },
-  magnet2: { gold: 4000, gems: 5, growth: 1.85, tier: 7, econ: 3.5 },
-};
-
-/** seals a save that has reached `maxDepth` must have broken (never the demo's Amber Seal) */
-export function sealsBelow(maxDepth: number): number[] {
-  return SEALS.filter((s, i) => maxDepth >= s.depth + SEAL_ROWS && !(DEMO && i === 0)).map((s) => s.depth);
-}
-
-/** a clean list of broken seal depths: known seals only, each once, in order */
-export function cleanSeals(stored: unknown): number[] {
-  if (!Array.isArray(stored)) return [];
-  const known = SEALS.filter((_, i) => !(DEMO && i === 0)).map((s) => s.depth);
-  return known.filter((dep) => stored.includes(dep));
-}
-
-/** v2 combat nodes and their old costs (base gold, gems, cores, tier multiplier) */
-const REMOVED_V3: Record<string, { gold: number; gems?: number; cores?: number; tier: number }> = {
-  brighthull: { gold: 120, tier: 1.35 },
-  plating: { gold: 180, gems: 1, tier: 1.35 },
-  shocks: { gold: 220, tier: 1.35 },
-  reflex: { gold: 260, tier: 1.35 },
-  spikes: { gold: 1100, gems: 3, tier: 3 },
-  juggernaut: { gold: 8000, cores: 1, tier: 7 },
-  coredrill: { gold: 6000, cores: 1, tier: 7 },
-};
 
 const isMap = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 const isNum = (x: unknown): x is number => typeof x === 'number' && isFinite(x);
@@ -289,12 +148,14 @@ function bindings(stored: unknown): Record<Action, string[]> {
 export function parseSave(raw: string | null): { data: SaveData; recovered: boolean } {
   if (!raw) return { data: newSave(), recovered: false };
   try {
-    let d = JSON.parse(raw) as Record<string, unknown>;
+    const d = JSON.parse(raw) as Record<string, unknown>;
     if (typeof d !== 'object' || d === null) throw new Error('bad');
-    let v = typeof d.version === 'number' ? d.version : 1;
-    while (v < SAVE_VERSION && MIGRATIONS[v]) {
-      d = MIGRATIONS[v](d);
-      v = d.version as number;
+    // an older save is not carried over: start fresh, keep only the settings
+    if (!isNum(d.version) || d.version < SAVE_VERSION) {
+      const fresh = newSave();
+      fresh.settings = shaped(fresh.settings, d.settings);
+      fresh.settings.bindings = bindings(isMap(d.settings) ? d.settings.bindings : undefined);
+      return { data: fresh, recovered: false };
     }
     // Every field is checked against the shape of a fresh save, so a damaged
     // file (null, a string or an array where something else belongs, NaN...)
@@ -310,7 +171,7 @@ export function parseSave(raw: string | null): { data: SaveData; recovered: bool
       tips: flagMap(d.tips),
       seenNodes: { ...base.seenNodes, ...flagMap(d.seenNodes) },
       relics: Array.isArray(d.relics) ? (d.relics as unknown[]).filter((x): x is string => typeof x === 'string') : [],
-      sealsBroken: cleanSeals(d.sealsBroken),
+      milestones: Array.isArray(d.milestones) ? (d.milestones as unknown[]).filter((x): x is string => typeof x === 'string') : [],
       version: SAVE_VERSION,
     };
     merged.settings.bindings = bindings(isMap(d.settings) ? d.settings.bindings : undefined);

@@ -8,7 +8,7 @@ import { RELICS } from '../src/data/relics';
 import { T, TILES } from '../src/data/tiles';
 
 const ctx = (seed: number, extra: Partial<GenContext> = {}): GenContext => ({
-  seed, sealsBroken: new Set(), relics: relicSites(seed, [], 0), doneLayers: new Set(), ...extra,
+  seed, relics: relicSites(seed, [], 0), doneLayers: new Set(), ...extra,
 });
 const same = (a: Uint8Array, b: Uint8Array) => Buffer.from(a).equals(Buffer.from(b));
 
@@ -62,26 +62,25 @@ describe('open world generation', () => {
     expect(crossings).toBeGreaterThan(0);
   });
 
-  it('seals run under every column, so there is no way around them sideways', () => {
-    for (const s of SEALS) {
-      const row = rowOfDepth(s.depth);
+  it('rune ribbons run under every column, with gaps, and are breakable rune stone', () => {
+    for (const sl of SEALS) {
+      const row = rowOfDepth(sl.depth);
+      let gaps = 0;
+      let runes = 0;
       for (const cx of [-500, -17, 0, 3, 500]) {
         const c = generateChunk(cx, Math.floor(row / CHUNK), NO_PROSPECT, ctx(9));
         for (let y = row; y < row + SEAL_ROWS; y++) {
           if (Math.floor(y / CHUNK) !== Math.floor(row / CHUNK)) continue;
-          for (let lx = 0; lx < CHUNK; lx++) expect(c.tiles[(y % CHUNK) * CHUNK + lx]).toBe(T.seal);
+          for (let lx = 0; lx < CHUNK; lx++) {
+            const t = c.tiles[(y % CHUNK) * CHUNK + lx];
+            if (t === T.seal) runes++;
+            else if (t === T.air) gaps++;
+          }
         }
       }
+      expect(runes).toBeGreaterThan(gaps * 2);
+      expect(gaps).toBeGreaterThan(0);
     }
-  });
-
-  it('broken seals generate open (except the demo Amber Seal)', () => {
-    const row = rowOfDepth(SEALS[1].depth);
-    const c = generateChunk(4, Math.floor(row / CHUNK), NO_PROSPECT, ctx(9, { sealsBroken: new Set([SEALS[1].depth]) }));
-    for (let lx = 0; lx < CHUNK; lx++) expect(c.tiles[(row % CHUNK) * CHUNK + lx]).toBe(T.air);
-    const amber = rowOfDepth(SEALS[0].depth);
-    const d = generateChunk(0, Math.floor(amber / CHUNK), NO_PROSPECT, ctx(9, { sealsBroken: new Set([SEALS[0].depth]), demo: true }));
-    expect(d.tiles[(amber % CHUNK) * CHUNK]).toBe(T.seal);
   });
 
   it("has one World's Heart, under the shaft", () => {
@@ -125,18 +124,10 @@ describe('open world generation', () => {
 
 describe('digs in the open world', () => {
   it('every dig starts at the surface over the shaft', () => {
-    const sim = new Sim({ seed: 1, upgrades: { root: 1 }, sealsBroken: [300, 520], gloom: 0 });
+    const sim = new Sim({ seed: 1, upgrades: { root: 1 }, milestones: ['amberstone', 'grotto'], gloom: 0 });
     expect(sim.depth()).toBe(0);
     expect(Math.abs(sim.player.x)).toBeLessThan(16);
     expect(sim.player.y).toBeLessThan(SKY_ROWS * 16);
-  });
-
-  it('a seal broken on an earlier dig is open on the next one', () => {
-    const row = rowOfDepth(SEALS[0].depth);
-    const fresh = new Sim({ seed: 2, upgrades: { root: 1 }, gloom: 0 });
-    expect(fresh.tileAt(0, row)).toBe(T.seal);
-    const later = new Sim({ seed: 2, upgrades: { root: 1 }, sealsBroken: [SEALS[0].depth], gloom: 0 });
-    for (let x = -30; x <= 30; x++) expect(later.tileAt(x, row)).toBe(T.air);
   });
 
   it('the player can walk and dig far sideways without hitting a wall', () => {

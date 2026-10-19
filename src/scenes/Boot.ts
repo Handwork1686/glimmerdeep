@@ -70,7 +70,6 @@ export class BootScene extends Phaser.Scene {
     a.create({ key: 'twinkle', frames: seq('twinkle', 4, [0, 1, 2, 3, 2, 1]), frameRate: 14, repeat: 0 });
     a.create({ key: 'flame', frames: seq('flame', 3), frameRate: 16, repeat: -1 });
     const has = (f: string) => this.textures.get('atlas').has(f);
-    if (has('drone_0')) a.create({ key: 'drone', frames: seq('drone', 2), frameRate: 12, repeat: -1 });
     if (has('fire_0')) a.create({ key: 'fire', frames: seq('fire', 3), frameRate: 10, repeat: -1 });
     // boulder frame from the tileset (material 8, mask 0, variant 0)
     const meta = this.cache.json.get('tilesMeta') as { columns: number; rowsPerMaterial: number };

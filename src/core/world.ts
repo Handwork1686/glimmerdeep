@@ -1,4 +1,4 @@
-import { T, TILES } from '../data/tiles';
+import { T } from '../data/tiles';
 import { Chunk, CHUNK, GenContext, generateChunk, Prospect } from './worldgen';
 
 /** A unique number for any tile, including negative x (|x| < 2^20). */
@@ -23,8 +23,8 @@ export class World {
     private ctx: GenContext,
     /** prospecting stats at the moment a chunk is generated */
     private prospect: () => Prospect,
-    /** rock hardness multiplier for a row */
-    private hpScale: (row: number) => number,
+    /** hit points of a tile at a row */
+    private tileHp: (tile: number, row: number) => number,
   ) {}
 
   get generated(): number {
@@ -39,8 +39,7 @@ export class World {
       const g = generateChunk(cx, cy, this.prospect(), this.ctx);
       const hp = new Float32Array(CHUNK * CHUNK);
       for (let ly = 0; ly < CHUNK; ly++) {
-        const s = this.hpScale(cy * CHUNK + ly);
-        for (let lx = 0; lx < CHUNK; lx++) hp[ly * CHUNK + lx] = TILES[g.tiles[ly * CHUNK + lx]].hp * s;
+        for (let lx = 0; lx < CHUNK; lx++) hp[ly * CHUNK + lx] = this.tileHp(g.tiles[ly * CHUNK + lx], cy * CHUNK + ly);
       }
       c = { ...g, hp };
       this.chunks.set(k, c);
@@ -66,7 +65,7 @@ export class World {
     const c = this.chunk(Math.floor(x / CHUNK), Math.floor(y / CHUNK));
     const i = (y & (CHUNK - 1)) * CHUNK + (x & (CHUNK - 1));
     c.tiles[i] = tile;
-    c.hp[i] = TILES[tile].hp * this.hpScale(y);
+    c.hp[i] = this.tileHp(tile, y);
   }
 
   hp(x: number, y: number): number {

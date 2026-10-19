@@ -11,7 +11,7 @@ export interface BoonDef {
   max: number;
   apply: (s: Stats, stacks: number) => void;
   /** one-shot effect when picked (e.g. refill light) */
-  onPick?: 'refill' | 'drone';
+  onPick?: 'refill';
 }
 
 const b = (o: BoonDef) => o;
@@ -43,7 +43,6 @@ export const BOONS: BoonDef[] = [
   b({ id: 'potluck', name: 'Pot Luck', desc: 'Chain pots grow 25% faster.', icon: 'chain', rarity: 'rare', max: 3, apply: (s, k) => { s.chainPot *= 1 + 0.25 * k; } }),
   b({ id: 'redhot', name: 'Red Hot', desc: 'Drill heat gives +20% more speed.', icon: 'speed', rarity: 'rare', max: 2, apply: (s, k) => { s.heatMax += 0.2 * k; } }),
   b({ id: 'seismic', name: 'Seismic Landing', desc: 'Hard landings crack the rock below.', icon: 'bomb', rarity: 'rare', max: 1, apply: (s) => { s.seismic += 1; } }),
-  b({ id: 'scoutdrone', name: 'Scout Drone', desc: 'A drone joins you and mines nearby rock.', icon: 'drone', rarity: 'rare', max: 2, onPick: 'drone', apply: (s, k) => { s.drones += k; } }),
   b({ id: 'deeppockets', name: 'Deep Pockets', desc: '+6% gold per 100 m of depth.', icon: 'coin', rarity: 'rare', max: 2, apply: (s, k) => { s.deepPockets += 0.06 * k; } }),
   // mythic
   b({ id: 'secondwind', name: 'Second Wind', desc: 'Relight once when your fuel runs out (25 fuel).', icon: 'heart', rarity: 'mythic', max: 1, apply: (s) => { s.secondWind += 1; } }),

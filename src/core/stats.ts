@@ -39,6 +39,7 @@ export interface Stats {
   emberSplit: number; // extra sparks per ember shard impact
   cinnabarMul: number; // cinnabar shard damage multiplier
   ricochet: number; // bounces off tiles a shard fails to break
+  chainKeeper: number; // seconds each drill break adds to the chain window
   chainPot: number; // chain pot multiplier growth
   chainTime: number; // seconds a chain stays alive
   chainFuel: number; // fuel per chain link
@@ -66,7 +67,6 @@ export interface Stats {
   bombCooldown: number; // Shard Bomb recharge (s)
   dynamite: number; // cinnabar charges per run
   boonEcho: number; // chance a picked boon is taken twice
-  drones: number;
   boonChoices: number;
   rerolls: number;
   banishes: number;
@@ -85,7 +85,7 @@ export function baseStats(): Stats {
     emberSplit: 0, cinnabarMul: 1, ricochet: 0,
     chainPot: 0.06, chainTime: 1.2, chainFuel: 0.06, resonance: 0, cataclysm: false, cataclysmEvery: 25, prismHeart: false, supernova: false,
     goldMul: 1, doubleOre: 0, gemChance: 0, deepPockets: 0, costMul: 1, fossilBonus: 0, xpMul: 1, survey: 0, surveyRange: 0, midas: false, midasTouch: 0, lanternGold: 0, boonGold: 0,
-    bombCooldown: 10, dynamite: 0, boonEcho: 0, drones: 0, boonChoices: 3, rerolls: 0, banishes: 0, headStart: 0,
+    bombCooldown: 10, dynamite: 0, boonEcho: 0, chainKeeper: 0, boonChoices: 3, rerolls: 0, banishes: 0, headStart: 0,
     luck: 0, prospect: { ...NO_PROSPECT },
   };
 }

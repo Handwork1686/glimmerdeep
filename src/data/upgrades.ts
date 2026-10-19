@@ -71,7 +71,7 @@ export const BRANCH_NAME: Record<Branch, string> = {
 export const BRANCH_HINT: Record<Branch, string> = {
   core: 'Every path starts here.',
   light: 'Lanternkeeper: stay down longer, go deeper on a weaker drill.',
-  drill: 'Driller: raw power. Breaks seals, but every point costs more.',
+  drill: 'Driller: raw power, and every drill break keeps the chain alive.',
   hull: 'Rig: speed, heat and shard flight. Keeps chains alive.',
   shatter: 'Shardstorm: shards break tiles for you. Blow everything up.',
   fortune: 'Prospector: earn more from every tile; gems and cores buy capstones.',
@@ -82,7 +82,7 @@ export const BRANCH_HINT: Record<Branch, string> = {
 export const UPGRADES: UpgradeNode[] = [
   n({ id: 'root', branch: 'core', name: 'The Wick', desc: 'Your lantern-pod. Every path starts here.', icon: 'lantern', max: 1, pos: [0, 0], requires: [], base: { gold: 0 }, apply: () => {} }),
   // repeatable late-game refinements (gold sinks)
-  n({ id: 'refine_bit', branch: 'core', name: 'Refine the Bit', desc: '+4% drill power and +3% shard damage. Repeatable.', icon: 'drill', max: 999, infinite: true, pos: [1, 0], at: [between(0), 1.45], requires: ['root'], base: { gold: 400000 }, growth: 1.28, apply: (s, l) => { s.drillPower *= 1 + 0.04 * l; s.shardDamage *= 1 + 0.03 * l; } }),
+  n({ id: 'refine_bit', branch: 'core', name: 'Refine the Bit', desc: '+4% drill power and +3% shard damage. Repeatable.', icon: 'drill', max: 999, infinite: true, pos: [1, 0], at: [between(0), 1.45], requires: ['root'], base: { gold: 20000 }, growth: 1.22, apply: (s, l) => { s.drillPower *= 1 + 0.04 * l; s.shardDamage *= 1 + 0.03 * l; } }),
   n({ id: 'refine_wick', branch: 'core', name: 'Refine the Wick', desc: '+3% lantern fuel. Repeatable.', icon: 'lantern', max: 999, infinite: true, pos: [1, 0], at: [between(6), 1.45], requires: ['root'], base: { gold: 25000 }, growth: 1.22, apply: (s, l) => { s.maxLight *= 1 + 0.03 * l; } }),
   n({ id: 'refine_purse', branch: 'core', name: 'Refine the Purse', desc: '+4% gold. Repeatable.', icon: 'coin', max: 999, infinite: true, pos: [1, 0], at: [between(3), 1.45], requires: ['root'], base: { gold: 25000 }, growth: 1.22, apply: (s, l) => { s.goldMul *= 1 + 0.04 * l; } }),
   n({ id: 'refine_chain', branch: 'core', name: 'Refine the Pot', desc: 'Chain pots grow 4% faster. Repeatable.', icon: 'chain', max: 999, infinite: true, pos: [1, 0], at: [between(2), 1.45], requires: ['root'], base: { gold: 30000 }, growth: 1.22, apply: (s, l) => { s.chainPot *= 1 + 0.04 * l; } }),
@@ -102,16 +102,16 @@ export const UPGRADES: UpgradeNode[] = [
   n({ id: 'lastlight', branch: 'light', name: 'Last Light', desc: '+20% lantern fuel, and below 25% fuel the drain is halved.', icon: 'lantern', max: 1, pos: [5, 1], requires: ['kindling', 'secondwind'], base: { gold: 9000, cores: 1 }, capstone: true, apply: (s, l) => { if (l) { s.lastLight = true; s.maxLight *= 1.2; } } }),
 
   // ---------------------------------------------------------------- DRILL
-  n({ id: 'bit', branch: 'drill', name: 'Tempered Bit', desc: '+1 drill power.', icon: 'drill', max: 5, pos: [1, 0], requires: ['root'], base: { gold: 10 }, growth: 1.8, apply: (s, l) => { s.drillPower += l; } }),
+  n({ id: 'bit', branch: 'drill', name: 'Tempered Bit', desc: '+1 drill power.', icon: 'drill', max: 5, pos: [1, 0], requires: ['root'], base: { gold: 10 }, growth: 1.25, apply: (s, l) => { s.drillPower += l; } }),
   n({ id: 'gearing', branch: 'drill', name: 'Gearing', desc: '+12% drill speed.', icon: 'speed', max: 5, pos: [2, -1], requires: ['bit'], base: { gold: 25 }, apply: (s, l) => { s.drillRate *= 1 + 0.12 * l; } }),
   n({ id: 'pulverize', branch: 'drill', name: 'Pulverizer', desc: 'Plain rock takes 20% more damage.', icon: 'drill', max: 3, pos: [2, 1], requires: ['bit'], base: { gold: 60 }, apply: (s, l) => { s.rockMul += 0.2 * l; } }),
-  n({ id: 'diamond', branch: 'drill', name: 'Diamond Edge', desc: '+3 drill power.', icon: 'drill', max: 5, pos: [3, 0], requires: ['gearing', 'pulverize'], base: { gold: 300, gems: 1 }, growth: 2.0, apply: (s, l) => { s.drillPower += 3 * l; } }),
+  n({ id: 'diamond', branch: 'drill', name: 'Diamond Edge', desc: '+3 drill power.', icon: 'drill', max: 5, pos: [3, 0], requires: ['gearing', 'pulverize'], base: { gold: 120, gems: 1 }, growth: 1.3, apply: (s, l) => { s.drillPower += 3 * l; } }),
   n({ id: 'prospect', branch: 'drill', name: "Prospector's Eye", desc: 'Ore takes 25% more damage.', icon: 'eye', max: 3, pos: [3, -2], requires: ['gearing'], base: { gold: 140 }, apply: (s, l) => { s.oreMul += 0.25 * l; } }),
   n({ id: 'widebit', branch: 'drill', name: 'Wide Bit', desc: 'Drilling also hits the tiles beside your target (25%).', icon: 'drill', max: 3, pos: [3, 2], requires: ['pulverize'], base: { gold: 400, gems: 3 }, apply: (s, l) => { s.wideBit += 0.25 * l; } }),
   n({ id: 'echo', branch: 'drill', name: 'Echo Drill', desc: 'Every 5th hit strikes three times. Each level hits one sooner.', icon: 'speed', max: 2, pos: [4, -1], requires: ['diamond', 'prospect'], base: { gold: 1400, gems: 5 }, apply: (s, l) => { if (l) s.echoEvery = 6 - l; } }),
   n({ id: 'overclock', branch: 'drill', name: 'Overclock', desc: '+20% drill speed.', icon: 'speed', max: 3, pos: [4, 1], requires: ['diamond', 'widebit'], base: { gold: 2200, gems: 4 }, apply: (s, l) => { s.drillRate *= 1 + 0.2 * l; } }),
   n({ id: 'seismic', branch: 'drill', name: 'Seismic Landing', desc: 'Falling 4+ tiles cracks the rock below.', icon: 'bomb', max: 2, pos: [5, -2], requires: ['echo'], base: { gold: 3000 }, apply: (s, l) => { s.seismic += l; } }),
-  n({ id: 'starbit', branch: 'drill', name: 'Starmetal Bit', desc: '+8 drill power.', icon: 'drill', max: 5, pos: [5, 0], requires: ['echo', 'overclock'], base: { gold: 40000, gems: 8 }, growth: 2.6, apply: (s, l) => { s.drillPower += 8 * l; } }),
+  n({ id: 'starbit', branch: 'drill', name: 'Starmetal Bit', desc: '+8 drill power.', icon: 'drill', max: 5, pos: [5, 0], requires: ['echo', 'overclock'], base: { gold: 2500, gems: 8 }, growth: 1.35, apply: (s, l) => { s.drillPower += 8 * l; } }),
   n({ id: 'excavator', branch: 'drill', name: 'Excavator', desc: 'Your bit chews a full 3x3 block.', icon: 'drill', max: 1, pos: [5, 2], requires: ['overclock'], base: { gold: 6000, cores: 1 }, capstone: true, apply: (s, l) => { if (l) { s.excavator = true; s.wideBit = Math.max(s.wideBit, 1); } } }),
 
   // ---------------------------------------------------------------- HULL
@@ -158,10 +158,10 @@ export const UPGRADES: UpgradeNode[] = [
   n({ id: 'reroll', branch: 'arcana', name: 'Second Thoughts', desc: '+1 boon reroll each run.', icon: 'dice', max: 3, pos: [3, 0], requires: ['echoes', 'shrapnel'], base: { gold: 250, gems: 1 }, apply: (s, l) => { s.rerolls += l; } }),
   n({ id: 'dynamite', branch: 'arcana', name: 'Cinnabar Charges', desc: 'Carry 2 sticks of dynamite (Q) that burst into cinnabar shards. +1 per extra level.', icon: 'bomb', max: 4, pos: [3, -2], requires: ['echoes'], base: { gold: 300, gems: 2 }, apply: (s, l) => { if (l) s.dynamite += 1 + l; } }),
   n({ id: 'headstart', branch: 'arcana', name: 'Head Start', desc: 'Begin each run with a random boon.', icon: 'star', max: 2, pos: [3, 2], requires: ['shrapnel'], base: { gold: 700, gems: 3 }, apply: (s, l) => { s.headStart += l; } }),
-  n({ id: 'drone', branch: 'arcana', name: 'Scout Drone', desc: 'A drone orbits you and mines nearby rock.', icon: 'drone', max: 2, pos: [4, -1], requires: ['dynamite', 'reroll'], base: { gold: 2000, gems: 5 }, apply: (s, l) => { s.drones += l; } }),
+  n({ id: 'chainkeeper', branch: 'arcana', name: 'Chain Keeper', desc: 'Every drill break adds 0.15 s to the chain window.', icon: 'clock', max: 2, pos: [4, -1], requires: ['dynamite', 'reroll'], base: { gold: 2000, gems: 5 }, apply: (s, l) => { s.chainKeeper += 0.15 * l; } }),
   n({ id: 'luck', branch: 'arcana', name: 'Lucky Stars', desc: 'Rare and mythic boons appear more often, and each boon you hold this dig makes ore worth 1% more.', icon: 'star', max: 3, pos: [4, 1], requires: ['reroll', 'headstart'], base: { gold: 1600, gems: 3 }, apply: (s, l) => { s.luck += l; s.boonGold += 0.01 * l; } }),
-  n({ id: 'banish', branch: 'arcana', name: 'Banish', desc: '+1 banish each run: remove a boon from the pool.', icon: 'skull', max: 2, pos: [5, -2], requires: ['drone'], base: { gold: 5000, gems: 4 }, apply: (s, l) => { s.banishes += l; } }),
-  n({ id: 'insight', branch: 'arcana', name: 'Insight', desc: 'Choose from 4 boons instead of 3.', icon: 'eye', max: 1, pos: [5, 0], requires: ['drone', 'luck'], base: { gold: 8000, cores: 1 }, apply: (s, l) => { s.boonChoices += l; } }),
+  n({ id: 'banish', branch: 'arcana', name: 'Banish', desc: '+1 banish each run: remove a boon from the pool.', icon: 'skull', max: 2, pos: [5, -2], requires: ['chainkeeper'], base: { gold: 5000, gems: 4 }, apply: (s, l) => { s.banishes += l; } }),
+  n({ id: 'insight', branch: 'arcana', name: 'Insight', desc: 'Choose from 4 boons instead of 3.', icon: 'eye', max: 1, pos: [5, 0], requires: ['chainkeeper', 'luck'], base: { gold: 8000, cores: 1 }, apply: (s, l) => { s.boonChoices += l; } }),
   n({ id: 'astral', branch: 'arcana', name: 'Astral Lantern', desc: 'Every level-up hand shows one more boon, you get a free reroll each dig, and levelling up restores 10 fuel.', icon: 'lantern', max: 1, pos: [5, 2], requires: ['luck'], base: { gold: 7000, cores: 1 }, capstone: true, apply: (s, l) => { if (l) { s.astral += 10; s.boonChoices += 1; s.rerolls += 1; } } }),
 
   // ---------------------------------------------------------------- WORLD
@@ -178,7 +178,7 @@ export const UPGRADES: UpgradeNode[] = [
 
 export const UPGRADE_BY_ID: Record<string, UpgradeNode> = Object.fromEntries(UPGRADES.map((u) => [u.id, u]));
 
-const TIER_MUL = [1, 1, 1, 1.4, 6, 24];
+const TIER_MUL = [1, 1, 1, 1.3, 2.5, 6];
 /** global price scale: peaceful digs last longer and mine more than the old fights allowed */
 export const ECON = 6;
 

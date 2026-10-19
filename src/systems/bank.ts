@@ -3,7 +3,6 @@ import { BOON_BY_ID } from '../data/boons';
 import { shardCodexKey, type ShardId } from '../data/shards';
 import type { RunSummary } from '../core/sim';
 import type { SaveData } from './save';
-import { cleanSeals } from './save';
 
 export interface BankResult {
   newDepthRecord: boolean;
@@ -29,8 +28,8 @@ export function bankRun(save: SaveData, r: RunSummary): BankResult {
   save.stats.longestRun = Math.max(save.stats.longestRun, r.time);
   save.stats.bestPot = Math.max(save.stats.bestPot, r.bestPot);
   save.stats.seals += r.seals;
-  // broken seals stay broken
-  save.sealsBroken = cleanSeals([...save.sealsBroken, ...r.sealsBroken]);
+  // layers reached for the first time stay claimed
+  for (const id of r.milestones) if (!save.milestones.includes(id)) save.milestones.push(id);
   save.stats.geodes += r.geodes;
   if (r.bestChain > save.stats.bestChain) {
     res.newChainRecord = save.stats.bestChain > 0;

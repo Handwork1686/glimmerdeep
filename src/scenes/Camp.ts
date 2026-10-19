@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { VIEW_H, VIEW_W } from '../config';
-import { SEALS } from '../data/biomes';
+import { BIOMES, BLEND_M } from '../data/biomes';
 import { BRANCH_ANGLE, BRANCH_COLOR, BRANCH_HINT, BRANCH_NAME, costOf, isAvailable, UPGRADE_BY_ID, UPGRADES, UpgradeNode } from '../data/upgrades';
 import { computeStats, GLOOM_DESCRIPTIONS } from '../core/progression';
 import { RELICS } from '../data/relics';
@@ -36,7 +36,7 @@ const LINES = [
   'The lantern in the square burns lower every night. Its light came from the Heart of the world. Go and find it.',
   'Ore is ore. Every scrap you find makes the Wick a little braver.',
   'Crystals sing when they break. Make them sing together, and the pot sings louder.',
-  'The seals are old stone, older than the town. Only a sharp drill gets through.',
+  'The rune ribbons are old stone, older than the town. Break one and the runes fly.',
   'Down past the grotto it gets hot. The embers go off like fireworks. Use them.',
   'They say the Mantle glows from below. That\'s the Heart, love. You\'re close.',
   'The square is bright again. Go on, then. The world goes deeper still.',
@@ -73,7 +73,7 @@ const STAT_LINES: [keyof Stats, string, (v: number) => string][] = [
   ['bombCooldown', 'Shard Bomb recharge', (v) => `${v.toFixed(1)}s`],
   ['dynamite', 'Dynamite', (v) => v.toFixed(0)],
   ['boonEcho', 'Boon echo', (v) => `${Math.round(v * 100)}%`],
-  ['drones', 'Drones', (v) => v.toFixed(0)],
+  ['chainKeeper', 'Chain keeper', (v) => `+${v.toFixed(2)}s`],
   ['rerolls', 'Rerolls', (v) => v.toFixed(0)],
   ['gemChance', 'Gem chance', (v) => `${Math.round(v * 100)}%`],
 ];
@@ -389,10 +389,12 @@ export class CampScene extends Phaser.Scene {
     const W = VIEW_W - WEB_W - 16;
     if (this.focus === 'menu') {
       const st = computeStats(Save.data.upgrades, {}, Save.data.relics);
-      const seal = SEALS.find((sl) => Save.data.maxDepth < sl.depth + 4);
+      // the next layer is a band, never a line: it melts in around its boundary
+      const next = BIOMES.find((b) => b.to < 99999 && Save.data.maxDepth < b.to + BLEND_M / 2);
+      const nextLayer = next ? BIOMES[BIOMES.indexOf(next) + 1] : null;
       const lines = [
         ['Lantern fuel', `${Math.round(st.maxLight)}`],
-        ['Drill power', seal ? `${Math.floor(st.drillPower)} / ${seal.power}` : `${Math.floor(st.drillPower)}`],
+        ['Drill power', `${Math.floor(st.drillPower)}`],
         ['Drill speed', `${st.drillRate.toFixed(1)}/s`],
         ['Relics', `${Save.data.relics.length} / ${RELICS.length}`],
         ['Deepest', `${Save.data.maxDepth} m`],
@@ -403,9 +405,15 @@ export class CampScene extends Phaser.Scene {
         this.info.add(txt(this, 0, 14 + i * 11, a, COLORS.dim, false));
         this.info.add(txt(this, W, 14 + i * 11, b, COLORS.text, false).setOrigin(1, 0));
       });
+      let y = 82;
+      if (next && nextLayer) {
+        const t = txt(this, 0, y, wrap(this, `Next: ${nextLayer.name}, blending in around ${next.to - BLEND_M / 2}-${next.to + BLEND_M / 2} m`, W), COLORS.dim, false);
+        this.info.add(t);
+        y += t.height + 4;
+      }
       const world = worldLine(st);
-      if (world) this.info.add(txt(this, 0, 82, wrap(this, `World: ${world}`, W), COLORS.green, false));
-      else if (Save.data.gloom > 0) this.info.add(txt(this, 0, 82, wrap(this, GLOOM_DESCRIPTIONS[Save.data.gloom], W), COLORS.violet, false));
+      if (world) this.info.add(txt(this, 0, y, wrap(this, `World: ${world}`, W), COLORS.green, false));
+      else if (Save.data.gloom > 0) this.info.add(txt(this, 0, y, wrap(this, GLOOM_DESCRIPTIONS[Save.data.gloom], W), COLORS.violet, false));
       return;
     }
     const n = UPGRADE_BY_ID[this.sel];

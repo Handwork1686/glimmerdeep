@@ -26,10 +26,14 @@ describe('the lantern', () => {
   });
 
   it("won't wait while you drill and break nothing", () => {
-    // drill into a seal with a weak bit: nothing breaks, and after a grace period the drain climbs
+    // drill into rock far too tough for the bit: nothing breaks, and after a grace period the drain climbs
     const sim = new Sim({ seed: 2, upgrades: { root: 1 }, gloom: 0 });
     const row = rowOfDepth(SEALS[0].depth);
     for (let y = row - 3; y < row; y++) for (let x = -1; x <= 0; x++) sim.setTile(x, y, T.air);
+    for (let x = -1; x <= 0; x++) {
+      sim.setTile(x, row, T.stone);
+      sim.world.setHp(x, row, 1e9);
+    }
     sim.player.x = 0;
     sim.player.y = (row - 1) * 16 + 10;
     sim.lastBreakT = 0;

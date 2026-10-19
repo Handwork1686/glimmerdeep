@@ -101,7 +101,7 @@ describe('the shard family', () => {
     expect(broke).toBeGreaterThan(4);
   });
 
-  it('nothing deals damage except the drill, shards, drones and landings', () => {
+  it('nothing deals damage except the drill, shards and landings', () => {
     const sim = lab({ root: 1, rupture: 3, fault: 5, cataclysm: 1, dynamite: 2 });
     const srcs = new Set<string>();
     const orig = sim.damageTile.bind(sim);
@@ -117,7 +117,7 @@ describe('the shard family', () => {
     sim.damageTile(0, ROW + 2, 1e9, 'drill');
     sim.step({ ...NO_INPUT, bomb: true, shardBomb: true });
     steps(sim, 150);
-    for (const s of srcs) expect(['drill', 'shard', 'drone', 'seismic']).toContain(s);
+    for (const s of srcs) expect(['drill', 'shard', 'seismic']).toContain(s);
   });
 
   it('vein rupture tears the vein apart with vein shards', () => {

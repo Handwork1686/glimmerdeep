@@ -48,7 +48,6 @@ export class RunScene extends Phaser.Scene {
   private shardSpr = new Map<number, Img>();
   private bombSpr = new Map<number, Img>();
   private rockSpr = new Map<number, Img>();
-  private droneSpr: Img[] = [];
   private decorSpr: Img[] = [];
   private cracks = new Map<number, Img>();
   private chips!: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -115,7 +114,7 @@ export class RunScene extends Phaser.Scene {
       seed,
       upgrades,
       relics: this.attract ? [] : save.relics,
-      sealsBroken: this.attract ? [] : save.sealsBroken,
+      milestones: this.attract ? [] : save.milestones,
       debugDepth,
       gloom: this.attract ? 0 : save.gloom,
       demo: DEMO,
@@ -128,7 +127,6 @@ export class RunScene extends Phaser.Scene {
     this.bombSpr.clear();
     this.rockSpr.clear();
     this.cracks.clear();
-    this.droneSpr = [];
     this.decorSpr = [];
     this.glowPool = [];
     this.popups = [];
@@ -407,7 +405,7 @@ export class RunScene extends Phaser.Scene {
       case 'hit': {
         const def = TILES[e.tile];
         const key = tileKey(e.x, e.y);
-        const max = def.hp * sim.hpScale(e.y);
+        const max = sim.tileHp(e.tile, e.y);
         const frac = Math.max(0, sim.hpAt(e.x, e.y) / max);
         const stage = Math.min(3, Math.floor((1 - frac) * 4));
         let c = this.cracks.get(key);
@@ -549,19 +547,12 @@ export class RunScene extends Phaser.Scene {
       }
       case 'chainLink':
         break;
-      case 'sealDeny':
-        this.sparks.setParticleTint(0x5fe0c4);
-        this.sparks.explode(4, e.x, e.y);
-        Audio.play('clank', { volume: 0.7, rate: 0.8 });
-        this.popup(isFinite(e.need) ? `Drill power ${Math.floor(sim.stats.drillPower)} / ${e.need}` : 'Sealed in the demo', e.x, e.y - 6, 0x5fe0c4);
-        break;
-      case 'sealBreak':
+      case 'milestone':
         Audio.play('seal_break');
-        this.shake(900, 0.008);
-        this.hitstop = Math.max(this.hitstop, 0.12);
-        this.flash(0x5fe0c4, 500, 0.3);
+        this.shake(500, 0.005);
+        this.flash(0x5fe0c4, 400, 0.25);
         this.sparks.setParticleTint(0x5fe0c4);
-        this.sparks.explode(40, e.x, e.y);
+        this.sparks.explode(30, e.x, e.y);
         break;
       case 'geode':
         if (this.time.now - this.lastGeode > 900) {
@@ -760,14 +751,6 @@ export class RunScene extends Phaser.Scene {
       s.destroy();
       this.rockSpr.delete(id);
     }
-
-    // drones
-    while (this.droneSpr.length < sim.drones.length) {
-      const has = this.textures.get('atlas').has('drone_0');
-      const s = this.add.image(0, 0, 'atlas', has ? 'drone_0' : 'icon_drone').setDepth(6);
-      this.droneSpr.push(s);
-    }
-    sim.drones.forEach((d, i) => this.droneSpr[i].setPosition(Math.round(d.x), Math.round(d.y)));
 
     this.syncDecor();
   }
@@ -973,11 +956,6 @@ export class RunScene extends Phaser.Scene {
       if (budget-- <= 0) break;
       this.smallLight.setScale(0.9);
       this.dark.erase(this.smallLight, sh.x - sx, sh.y - sy);
-    }
-    for (const dr of sim.drones) {
-      this.smallLight.setScale(0.8);
-      this.dark.erase(this.smallLight, dr.x - sx, dr.y - sy);
-      this.glow(dr.x, dr.y, 0x5fe0c4, 0.5, 0.7);
     }
     for (let i = this.glowUsed; i < this.glowPool.length; i++) this.glowPool[i].setVisible(false);
 

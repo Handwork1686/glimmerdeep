@@ -118,25 +118,42 @@ export function biomeAt(depth: number): BiomeDef {
   return BIOMES[BIOMES.length - 1];
 }
 
+/** layers melt into each other over this many metres, centred on the boundary */
+export const BLEND_M = 50;
+const smooth = (x: number) => {
+  const t = Math.min(1, Math.max(0, x));
+  return t * t * (3 - 2 * t);
+};
+
 /**
- * Strata Seals: glowing bands at biome boundaries that only a strong enough
- * drill can break. They replace the old guardians as the game's gates.
+ * The biome at a depth, blended: inside a boundary's band each cell belongs to
+ * the next biome with probability `p` (a smooth-step from 0 to 1), otherwise `a`.
+ */
+export function blendAt(depth: number): { a: BiomeDef; b: BiomeDef | null; p: number } {
+  for (let i = 0; i < BIOMES.length - 1; i++) {
+    const edge = BIOMES[i].to;
+    if (Math.abs(depth - edge) < BLEND_M / 2) return { a: BIOMES[i], b: BIOMES[i + 1], p: smooth((depth - (edge - BLEND_M / 2)) / BLEND_M) };
+  }
+  return { a: biomeAt(depth), b: null, p: 0 };
+}
+
+/**
+ * Optional rune ribbons: a 2-row band of breakable rune stone, with gaps, at the
+ * old seal depths. They are a rich shard source, never a wall.
  */
 export interface SealDef {
   depth: number;
-  /** drill power needed to break it */
-  power: number;
   name: string;
 }
 
 export const SEALS: SealDef[] = [
-  { depth: 300, power: 10, name: 'The Amber Seal' },
-  { depth: 520, power: 22, name: 'The Glimmer Seal' },
-  { depth: 760, power: 40, name: 'The Ember Seal' },
-  { depth: 1050, power: 90, name: 'The Hollow Seal' },
-  { depth: 1494, power: 150, name: 'The Mantle Seal' },
+  { depth: 300, name: 'The Amber Ribbon' },
+  { depth: 520, name: 'The Glimmer Ribbon' },
+  { depth: 760, name: 'The Ember Ribbon' },
+  { depth: 1050, name: 'The Hollow Ribbon' },
+  { depth: 1494, name: 'The Mantle Ribbon' },
 ];
-export const SEAL_ROWS = 3;
+export const SEAL_ROWS = 2;
 
 /** The World's Heart chamber: a great cavern with the heart crystal at its centre. */
 export const HEART_DEPTH = 1500;

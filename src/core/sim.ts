@@ -7,7 +7,8 @@ import { biomeAt, SEAL_ROWS, SEALS } from '../data/biomes';
 import { BOON_BY_ID, BoonDef, BOONS } from '../data/boons';
 import { BASE_SHARD_DAMAGE, MAX_ACTIVE_SHARDS, MAX_PER_BURST, SHARD_BY_ID, ShardId, shardDepthScale } from '../data/shards';
 import { ItemKind, T, TILES } from '../data/tiles';
-import { computeStats, GloomMods, gloomMods, rollBoons, xpForLevel } from './progression';
+import { computeStats, GloomMods, gloomMods, rockHp, hpCurve, rollBoons, xpForLevel } from './progression';
+import { MILESTONE_FUEL } from './constants';
 import { Rng } from './rng';
 import { Stats } from './stats';
 import { keyX, keyY, tileKey, World } from './world';
@@ -109,12 +110,6 @@ export interface FallingRock {
   vy: number;
 }
 
-export interface Drone {
-  angle: number;
-  cd: number;
-  x: number;
-  y: number;
-}
 
 export type SimEvent =
   | { t: 'tile'; x: number; y: number }
@@ -133,8 +128,7 @@ export type SimEvent =
   | { t: 'quake'; x: number; y: number }
   | { t: 'rockShatter'; x: number; y: number }
   | { t: 'clank'; x: number; y: number }
-  | { t: 'sealDeny'; x: number; y: number; need: number; name: string }
-  | { t: 'sealBreak'; x: number; y: number; name: string }
+  | { t: 'milestone'; id: string; name: string; x: number; y: number }
   | { t: 'geode'; x: number; y: number }
   | { t: 'relic'; id: string; x: number; y: number }
   | { t: 'heart'; x: number; y: number }
@@ -165,9 +159,10 @@ export interface RunSummary {
   /** ore pieces mined this run, by kind */
   ores: Partial<Record<ItemKind, number>>;
   relics: string[];
+  /** rune ribbons broken into this dig */
   seals: number;
-  /** depths of the seals broken this dig (they stay broken) */
-  sealsBroken: number[];
+  /** layers reached for the first time ever this dig */
+  milestones: string[];
   geodes: number;
   reachedHeart: boolean;
   reason: EndReason;
@@ -178,12 +173,12 @@ export interface SimConfig {
   upgrades: Record<string, number>;
   /** relics found on earlier digs (their perks apply, and they are not buried again) */
   relics?: string[];
-  /** seals broken on earlier digs: they generate open */
-  sealsBroken?: number[];
+  /** layers whose milestone (+max fuel) was claimed on earlier digs */
+  milestones?: string[];
   /** QA only (dev builds, soak tests): start this many metres down instead of at the surface */
   debugDepth?: number;
   gloom: number;
-  /** demo: the first Strata Seal never breaks */
+  /** demo: the dig ends at the first rune ribbon depth */
   demo?: boolean;
 }
 
@@ -233,11 +228,6 @@ export const DRAIN_FLOOR = 0.4;
 export const STALL_MAX = 1.5;
 
 export class Sim {
-  /**
-   * Drill power that counts against a Strata Seal: the drill you built (Workshop
-   * and relics). This dig's boons speed you up, but seals answer only to the bit.
-   */
-  sealPower = 0;
   /** the open world: generated chunk by chunk as the Wick goes */
   world: World;
   rng: Rng;
@@ -256,7 +246,6 @@ export class Sim {
   pickups: Pickup[] = [];
   bombs: Bomb[] = [];
   rocks: FallingRock[] = [];
-  drones: Drone[] = [];
   events: SimEvent[] = [];
   /** tile key -> relic id buried there */
   relicAt = new Map<number, string>();
@@ -283,9 +272,11 @@ export class Sim {
   lightPickups = 0;
   ores: Partial<Record<ItemKind, number>> = {};
   relicsFound: string[] = [];
-  sealsBroken = 0;
-  /** seal depths broken on this dig */
-  sealsBrokenNow: number[] = [];
+  /** rune ribbon bands broken into this dig (by depth) */
+  private ribbonsHit = new Set<number>();
+  /** layers claimed on earlier digs, plus this one */
+  milestonesClaimed: Set<string>;
+  milestonesNow: string[] = [];
   geodesCracked = 0;
   reachedHeart = false;
   choices: BoonDef[] | null = null;
@@ -297,8 +288,6 @@ export class Sim {
   private nextId = 1;
   /** tiles that shatter on a timer (seal waves, the heart, Supernova) */
   private breakQueue: { x: number; y: number; delay: number }[] = [];
-  private sealDenyT = 0;
-  private sealsShattered = new Set<number>();
   secondWindsUsed = 0;
   /** when the last tile broke (for the stall drain) */
   lastBreakT = 0;
@@ -312,15 +301,15 @@ export class Sim {
     this.gloom = gloomMods(cfg.gloom);
     this.baseUpgrades = cfg.upgrades;
     this.relicsKnown = [...(cfg.relics ?? [])];
-    this.stats = computeStats(cfg.upgrades, this.boons, this.relicsKnown);
-    this.sealPower = computeStats(cfg.upgrades, {}, this.relicsKnown).drillPower;
+    this.milestonesClaimed = new Set(cfg.milestones ?? []);
+    this.stats = this.recompute();
     this.heart = { ...HEART_POS };
     const sites = relicSites(cfg.seed, this.relicsKnown, this.prospect().relicSense);
     for (const r of sites) this.relicAt.set(tileKey(r.x, r.y), r.id);
     this.world = new World(
-      { seed: cfg.seed, sealsBroken: new Set(cfg.sealsBroken ?? []), demo: cfg.demo, relics: sites, doneLayers: finishedLayers(this.relicsKnown) },
+      { seed: cfg.seed, relics: sites, doneLayers: finishedLayers(this.relicsKnown) },
       () => this.prospect(),
-      (row) => this.hpScale(row),
+      (tile, row) => this.tileHp(tile, row),
     );
     this.rerolls = this.stats.rerolls;
     this.banishes = this.stats.banishes;
@@ -337,7 +326,6 @@ export class Sim {
     }
     this.player.fallFrom = this.player.y;
     this.light = this.stats.maxLight;
-    for (let i = 0; i < this.stats.drones; i++) this.addDrone();
     for (let i = 0; i < this.stats.headStart; i++) {
       const commons = BOONS.filter((b) => b.rarity === 'common' && (this.boons[b.id] ?? 0) < b.max);
       if (commons.length) this.applyBoon(this.rng.pick(commons), true);
@@ -350,31 +338,27 @@ export class Sim {
     return this.stats?.prospect ?? NO_PROSPECT;
   }
 
-  hpScale(row: number): number {
+  /** stats from the Workshop, relics, this dig's boons and the layer milestones claimed so far */
+  private recompute(): Stats {
+    return computeStats(this.baseUpgrades, this.boons, this.relicsKnown, this.milestonesClaimed.size);
+  }
+
+  /**
+   * Hit points of a tile at a row. Rock gets harder along one smooth curve of
+   * depth (no step at a layer boundary); ore keeps its toughness relative to the
+   * rock around it; rune ribbons are a little tougher than the rock they sit in.
+   */
+  tileHp(tile: number, row: number): number {
+    const def = TILES[tile];
+    if (def.unbreakable || def.hp <= 0) return def.hp;
     const depth = depthOfRow(row);
-    let s = this.gloom.rockMul;
-    if (depth > 1500) s *= 1 + (depth - 1500) / 300;
-    return s;
+    if (tile === T.seal) return rockHp(depth) * 1.2 * this.gloom.rockMul;
+    return def.hp * hpCurve(depth) * this.gloom.rockMul;
   }
 
   /** below the Heart, ore keeps getting richer the deeper it lies */
   valueScale(depth: number): number {
     return 1 + Math.max(0, depth - 1500) / 300;
-  }
-
-  /** drill power a seal row needs, or 0 if the row is not a seal */
-  sealNeed(row: number): number {
-    const depth = depthOfRow(row);
-    for (let i = 0; i < SEALS.length; i++) {
-      const sl = SEALS[i];
-      if (depth >= sl.depth && depth < sl.depth + SEAL_ROWS) return this.cfg.demo && i === 0 ? Infinity : sl.power;
-    }
-    return 0;
-  }
-
-  sealAt(row: number) {
-    const depth = depthOfRow(row);
-    return SEALS.find((sl) => depth >= sl.depth && depth < sl.depth + SEAL_ROWS) ?? null;
   }
 
   /** nearest unfound relic within reach (for the Survey Lamp's pointer) */
@@ -456,10 +440,6 @@ export class Sim {
     return e;
   }
 
-  private addDrone() {
-    this.drones.push({ angle: this.rng.range(0, Math.PI * 2), cd: this.rng.range(0, 0.5), x: this.player.x, y: this.player.y });
-  }
-
   // ------------------------------------------------------------- tile damage
   setTile(x: number, y: number, tile: number) {
     if (y < 0) return;
@@ -468,25 +448,13 @@ export class Sim {
   }
 
   /**
-   * Damage a tile. Everything that breaks rock is the drill, a shard, a drone or
-   * a seismic landing: there is no other damage path.
+   * Damage a tile. Everything that breaks rock is the drill, a shard or a
+   * seismic landing: there is no other damage path, and nothing is a wall.
    */
-  damageTile(x: number, y: number, dmg: number, src: 'drill' | 'shard' | 'drone' | 'seismic', gen = 0, by?: ShardId): boolean {
+  damageTile(x: number, y: number, dmg: number, src: 'drill' | 'shard' | 'seismic', gen = 0, by?: ShardId): boolean {
     const tile = this.tileAt(x, y);
     const def = TILES[tile];
     if (tile === T.air || def.unbreakable) return false;
-    if (tile === T.seal) {
-      // seals only yield to a strong enough drill
-      const need = this.sealNeed(y);
-      if (src !== 'drill' && src !== 'seismic') return false;
-      if (this.sealPower < need) {
-        if (this.sealDenyT <= 0) {
-          this.sealDenyT = 0.6;
-          this.emit({ t: 'sealDeny', x: x * TILE + 8, y: y * TILE + 8, need, name: this.sealAt(y)?.name ?? '' });
-        }
-        return false;
-      }
-    }
     const mult = def.ore ? this.stats.oreMul : this.stats.rockMul;
     const left = this.world.hp(x, y) - dmg * mult;
     this.world.setHp(x, y, left);
@@ -553,12 +521,11 @@ export class Sim {
       this.geodesCracked++;
       this.emit({ t: 'geode', x: cx, y: cy });
     }
-    if (tile === T.seal) this.shatterSeal(x, y);
+    if (tile === T.seal) this.ribbonBreak(x, y, cx, cy, depth, gen);
     if (tile === T.worldheart) this.breakHeart(cx, cy);
     // shard sources: everything resolves through spawnShards
     if (tile === T.geode) this.geodeVolley(cx, cy, depth, gen);
     else if (def.shards) this.spawnShards(cx, cy, def.shardType ?? 'glass', def.shards, { power: def.shardPower, gen });
-    else if (tile === T.seal && src === 'wave' && this.rng.chance(0.34)) this.spawnShards(cx, cy, 'rune', 1, { exact: true, gen });
     // fault shards never crack more fault lines: plain rock would cascade forever
     else if (!def.ore && !def.light && tile !== T.seal && by !== 'fault' && gen <= 1 && this.stats.faultChance > 0 && this.rng.chance(Math.min(0.3, this.stats.faultChance))) {
       this.spawnShards(cx, cy, 'fault', 2, { gen });
@@ -618,31 +585,21 @@ export class Sim {
     this.relicAt.delete(k);
     this.relicsFound.push(id);
     this.relicsKnown.push(id);
-    this.stats = computeStats(this.baseUpgrades, this.boons, this.relicsKnown);
-    this.sealPower = computeStats(this.baseUpgrades, {}, this.relicsKnown).drillPower;
+    this.stats = this.recompute();
     this.light = Math.min(this.light, this.stats.maxLight);
     this.emit({ t: 'relic', id, x: cx, y: cy });
   }
 
-  /** breaking one seal tile sends a shattering wave through the whole band */
-  private shatterSeal(x: number, y: number) {
-    const seal = this.sealAt(y);
-    if (!seal) return;
-    const y0 = rowOfDepth(seal.depth);
-    // only the first break sends a wave (the band is endless sideways; tiles
-    // the wave itself breaks must not start new waves of their own)
-    if (this.sealsShattered.has(seal.depth)) return;
-    this.sealsShattered.add(seal.depth);
-    this.sealsBroken++;
-    this.sealsBrokenNow.push(seal.depth);
-    this.emit({ t: 'sealBreak', x: x * TILE + 8, y: y * TILE + 8, name: seal.name });
-    // the wave runs out across the band as far as the eye can see
-    for (let yy = y0; yy < y0 + SEAL_ROWS; yy++) {
-      for (let xx = x - 26; xx <= x + 26; xx++) {
-        if (this.tileAt(xx, yy) !== T.seal || this.breakQueue.some((b) => b.x === xx && b.y === yy)) continue;
-        this.breakQueue.push({ x: xx, y: yy, delay: 0.03 + Math.hypot(xx - x, (yy - y) * 2) * 0.022 });
-      }
-    }
+  /** a rune ribbon tile gives way: a little gold and a rune shard, never a barrier */
+  private ribbonBreak(x: number, y: number, cx: number, cy: number, depth: number, gen: number) {
+    const sl = SEALS.find((r) => depth >= r.depth && depth < r.depth + SEAL_ROWS);
+    if (sl) this.ribbonsHit.add(sl.depth);
+    const g = (6 + depth * 0.06) * this.stats.goldMul * this.gloom.goldMul;
+    this.spawnPickup('gold', cx, cy, { gold: g });
+    if (this.chain > 0) this.potGold += g;
+    if (this.rng.chance(0.6)) this.spawnShards(cx, cy, 'rune', 1, { gen });
+    void x;
+    void y;
   }
 
   private breakHeart(cx: number, cy: number) {
@@ -686,7 +643,7 @@ export class Sim {
       }
     }
     // each vein shard bursts out of its own ore (enough to break it), then flies on
-    const power = TILES[tile].hp * this.hpScale(y) * 1.05;
+    const power = this.tileHp(tile, y) * 1.05;
     const per = 1 + Math.floor(this.stats.shardBonus / 3);
     for (const [hx, hy] of hits) this.spawnShards(hx * TILE + 8, hy * TILE + 8, 'vein', per, { power, exact: true, flat: true });
   }
@@ -833,6 +790,18 @@ export class Sim {
     }
   }
 
+  /** the first time a layer is ever reached: a fanfare, a burst of shards and a little more fuel for good */
+  private claimMilestone(id: string, name: string) {
+    if (this.milestonesClaimed.has(id)) return;
+    this.milestonesClaimed.add(id);
+    this.milestonesNow.push(id);
+    this.stats = this.recompute();
+    const p = this.player;
+    this.emit({ t: 'milestone', id, name, x: p.x, y: p.y });
+    this.addLight(MILESTONE_FUEL, 'milestone');
+    this.spawnShards(p.x, p.y, 'crystal', 10, { power: BASE_SHARD_DAMAGE * 1.5, gen: 1 });
+  }
+
   // ------------------------------------------------------------------- boons
   /** Called by the UI when it is ready to show the next level-up hand. */
   openChoice(): BoonDef[] | null {
@@ -886,12 +855,10 @@ export class Sim {
   private applyBoon(def: BoonDef, silent: boolean) {
     this.boons[def.id] = (this.boons[def.id] ?? 0) + 1;
     const prevMax = this.stats.maxLight;
-    const prevDrones = this.stats.drones;
-    this.stats = computeStats(this.baseUpgrades, this.boons, this.relicsKnown);
+    this.stats = this.recompute();
     if (def.onPick === 'refill') this.addLight(15, 'boon');
     void prevMax;
     this.light = Math.min(this.light, this.stats.maxLight);
-    for (let i = prevDrones; i < this.stats.drones; i++) this.addDrone();
     void silent;
   }
 
@@ -938,9 +905,13 @@ export class Sim {
     if (d > this.maxDepth) this.maxDepth = d;
     const biome = biomeAt(d);
     if (biome.id !== this.currentBiome && p.y > SKY_ROWS * TILE) {
-      if (this.currentBiome !== '') this.emit({ t: 'biome', id: biome.id, name: biome.name });
+      if (this.currentBiome !== '') {
+        this.emit({ t: 'biome', id: biome.id, name: biome.name });
+        this.claimMilestone(biome.id, biome.name);
+      }
       this.currentBiome = biome.id;
     }
+    if (this.cfg.demo && d >= SEALS[0].depth && !this.over) this.endRun('quit');
 
     // chain timer
     // the chain holds while the drill is chewing something valuable
@@ -949,7 +920,6 @@ export class Sim {
       if (!chewing) this.chainTimer -= dt;
       if (this.chainTimer <= 0) this.cashOut();
     }
-    if (this.sealDenyT > 0) this.sealDenyT -= dt;
     // timed shatters (seal waves, the heart)
     for (let i = this.breakQueue.length - 1; i >= 0; i--) {
       const b = this.breakQueue[i];
@@ -964,7 +934,6 @@ export class Sim {
     this.stepPickups(dt);
     this.stepBombs(dt);
     this.stepRocks(dt);
-    this.stepDrones(dt);
   }
 
   endRun(reason: EndReason) {
@@ -986,7 +955,7 @@ export class Sim {
       gold: Math.round(this.gold), gems: this.gems, cores: this.cores, depth: this.depth(), maxDepth: this.maxDepth,
       time: this.time, bestChain: this.bestChain, bestPot: Math.round(this.bestPot), level: this.level, boons,
       bombs: this.bombsUsed, shardTypes: { ...this.shardSpawned }, lightPickups: this.lightPickups, ores: { ...this.ores }, relics: [...this.relicsFound],
-      seals: this.sealsBroken, sealsBroken: [...this.sealsBrokenNow], geodes: this.geodesCracked, reachedHeart: this.reachedHeart, reason: this.endReason,
+      seals: this.ribbonsHit.size, milestones: [...this.milestonesNow], geodes: this.geodesCracked, reachedHeart: this.reachedHeart, reason: this.endReason,
     };
   }
 
@@ -1134,14 +1103,12 @@ export class Sim {
       p.drillTarget = target2;
       const tx = target2.x;
       const ty = target2.y;
-      const sealLocked = def.name === 'seal' && this.sealPower < this.sealNeed(ty);
-      if (def.unbreakable || sealLocked) {
+      if (def.unbreakable) {
         p.drillTimer += dt;
         p.heat = Math.max(0, p.heat - dt * 1.2);
         if (p.drillTimer > 0.35) {
           p.drillTimer = 0;
-          if (sealLocked) this.damageTile(tx, ty, 0, 'drill');
-          else this.emit({ t: 'clank', x: tx * TILE + 8, y: ty * TILE + 8 });
+          this.emit({ t: 'clank', x: tx * TILE + 8, y: ty * TILE + 8 });
         }
       } else {
         // the bit heats up while it keeps chewing, and spins faster
@@ -1384,35 +1351,5 @@ export class Sim {
       r.y = ny;
     }
     this.rocks = this.rocks.filter((r) => r.vy >= 0);
-  }
-
-  private stepDrones(dt: number) {
-    const p = this.player;
-    for (const d of this.drones) {
-      d.angle += dt * 2.2;
-      d.x = p.x + Math.cos(d.angle) * 22;
-      d.y = p.y + Math.sin(d.angle) * 16;
-      d.cd -= dt;
-      if (d.cd <= 0) {
-        d.cd = 0.55;
-        // strike the closest solid tile in reach
-        const tx = Math.floor(d.x / TILE);
-        const ty = Math.floor(d.y / TILE);
-        let best: [number, number] | null = null;
-        let bd = 1e9;
-        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-          const x = tx + dx;
-          const y = ty + dy;
-          const def = TILES[this.tileAt(x, y)];
-          if (!def.solid || def.unbreakable) continue;
-          const dd = Math.hypot(x * TILE + 8 - d.x, y * TILE + 8 - d.y);
-          if (dd < bd) {
-            bd = dd;
-            best = [x, y];
-          }
-        }
-        if (best) this.damageTile(best[0], best[1], this.stats.drillPower * 0.7, 'drone');
-      }
-    }
   }
 }

@@ -9,7 +9,6 @@ import { computeStats } from '../../src/core/progression';
 import { Sim } from '../../src/core/sim';
 import { costOf, isAvailable, UPGRADES } from '../../src/data/upgrades';
 import { bankRun } from '../../src/systems/bank';
-import { SEALS } from '../../src/data/biomes';
 import { newSave } from '../../src/systems/save';
 
 const args = process.argv.slice(2);
@@ -38,20 +37,16 @@ const BUILDS: Record<BuildId, { branches: Record<string, number>; nodes: string[
   arcana: { branches: { arcana: 1 }, nodes: [] },
 };
 const OFF = 0.12; // weight for nodes outside the build
-function priority(id: string, branch: string, gated: boolean): number {
+function priority(id: string, branch: string): number {
   const b = BUILDS[BUILD];
   if (BUILD === 'balanced') return BALANCED[branch] ?? 0.5;
   if (b.nodes.includes(id)) return 1;
-  // like a real player, every build buys the drill power the next seal demands
-  if (gated && (branch === 'drill' || id === 'refine_bit')) return 1;
   return b.branches[branch] ?? (branch === 'core' ? 0.3 : OFF);
 }
 
 function shop() {
   for (let guard = 0; guard < 200; guard++) {
     const st = computeStats(save.upgrades);
-    const next = SEALS.find((sl) => !save.sealsBroken.includes(sl.depth));
-    const gated = !!next && st.drillPower < next.power;
     let best: { id: string; score: number } | null = null;
     for (const u of UPGRADES) {
       const lvl = save.upgrades[u.id] ?? 0;
@@ -59,7 +54,7 @@ function shop() {
       const c = costOf(u, lvl, st.costMul);
       if (c.gold > save.gold || (c.gems ?? 0) > save.gems || (c.cores ?? 0) > save.cores) continue;
       // gems and cores are scarcer than gold: count them in the price
-      const score = priority(u.id, u.branch, gated) / Math.log10(10 + c.gold + 400 * (c.gems ?? 0) + 25000 * (c.cores ?? 0));
+      const score = priority(u.id, u.branch) / Math.log10(10 + c.gold + 400 * (c.gems ?? 0) + 25000 * (c.cores ?? 0));
       if (!best || score > best.score) best = { id: u.id, score };
     }
     if (!best) return;
@@ -75,8 +70,8 @@ function shop() {
 }
 
 for (let r = 0; r < RUNS; r++) {
-  // every dig starts at the surface; broken seals stay broken
-  const sim = new Sim({ seed: 1000 + r, upgrades: save.upgrades, relics: save.relics, sealsBroken: save.sealsBroken, gloom: 0 });
+  // every dig starts at the surface; claimed layer milestones stay claimed
+  const sim = new Sim({ seed: 1000 + r, upgrades: save.upgrades, relics: save.relics, milestones: save.milestones, gloom: 0 });
   const bot = new Bot();
   let steps = 0;
   const breaks: number[] = [];
@@ -105,11 +100,11 @@ for (let r = 0; r < RUNS; r++) {
   bankRun(save, sum);
   if (save.maxDepth >= 50) mark('50m');
   if (save.maxDepth >= 120) mark('Amberstone 120m');
-  if (save.maxDepth >= 304) mark('Amber Seal (300m)');
-  if (save.maxDepth >= 524) mark('Glimmer Seal (520m)');
-  if (save.maxDepth >= 764) mark('Ember Seal (760m)');
-  if (save.maxDepth >= 1054) mark('Hollow Seal (1050m)');
-  if (save.maxDepth >= 1498) mark('Mantle Seal (1494m)');
+  if (save.maxDepth >= 304) mark('Grotto (300m)');
+  if (save.maxDepth >= 524) mark('Emberdeep (520m)');
+  if (save.maxDepth >= 764) mark('Hollow (760m)');
+  if (save.maxDepth >= 1054) mark('Mantle (1050m)');
+  if (save.maxDepth >= 1498) mark('Heart (1500m)');
   if (save.stats.hearts > 0) mark("World's Heart (credits)");
   const before = save.stats.nodesBought;
   shop();

@@ -2,7 +2,10 @@ import { BOON_BY_ID, BOONS, BoonDef, RARITY_WEIGHT } from '../data/boons';
 import { RELIC_BY_ID } from '../data/relics';
 import { UPGRADES } from '../data/upgrades';
 import { Rng } from './rng';
+import { MILESTONE_FUEL } from './constants';
 import { baseStats, Stats } from './stats';
+
+export { baseHpMean, hpCurve, rockHp } from './rock';
 
 /**
  * Deep Pressure tiers (optional difficulty, unlocked by reaching the World's
@@ -17,33 +20,26 @@ export interface GloomMods {
 
 export const GLOOM_DESCRIPTIONS = [
   'The ordinary deep.',
-  'Fuel burns 10% faster.',
-  'Rock is 15% tougher.',
-  'Fuel burns 15% faster.',
-  'Rock is 25% tougher.',
-  'Fuel burns 20% faster.',
-  'Rock is 35% tougher.',
-  'One fewer boon to choose from.',
-  'Fuel burns 30% faster.',
-  'Rock is 50% tougher.',
+  'Fuel burns 10% faster, rock is 12% tougher.',
+  'Rock is 24% tougher.',
+  'Fuel burns 15% faster, rock is 36% tougher.',
+  'Rock is 48% tougher.',
+  'Fuel burns 20% faster, rock is 60% tougher.',
+  'Rock is 72% tougher.',
+  'One fewer boon to choose from, rock is 84% tougher.',
+  'Fuel burns 30% faster, rock is 96% tougher.',
+  'Rock is 108% tougher.',
   'The full weight of the world. Everything at once.',
 ];
 
 export function gloomMods(tier: number): GloomMods {
-  const m: GloomMods = { drainMul: 1, rockMul: 1, goldMul: 1 + 0.25 * tier, boonChoiceDelta: 0 };
+  const m: GloomMods = { drainMul: 1, rockMul: 1 + 0.12 * tier, goldMul: 1 + 0.25 * tier, boonChoiceDelta: 0 };
   if (tier >= 1) m.drainMul = 1.1;
-  if (tier >= 2) m.rockMul = 1.15;
   if (tier >= 3) m.drainMul = 1.15;
-  if (tier >= 4) m.rockMul = 1.25;
   if (tier >= 5) m.drainMul = 1.2;
-  if (tier >= 6) m.rockMul = 1.35;
   if (tier >= 7) m.boonChoiceDelta = -1;
   if (tier >= 8) m.drainMul = 1.3;
-  if (tier >= 9) m.rockMul = 1.5;
-  if (tier >= 10) {
-    m.drainMul = 1.4;
-    m.rockMul = 1.65;
-  }
+  if (tier >= 10) m.drainMul = 1.4;
   return m;
 }
 
@@ -51,8 +47,10 @@ export function gloomMods(tier: number): GloomMods {
  * Stats from Workshop upgrades, found relics and this run's boons. The
  * repeatable Refine nodes multiply last, so they scale the real totals.
  */
-export function computeStats(upgrades: Record<string, number>, boons: Record<string, number> = {}, relics: string[] = []): Stats {
+export function computeStats(upgrades: Record<string, number>, boons: Record<string, number> = {}, relics: string[] = [], milestones = 0): Stats {
   const s = baseStats();
+  // each layer reached for the first time ever lights the lantern a little more, for good
+  s.maxLight += MILESTONE_FUEL * milestones;
   for (const u of UPGRADES) {
     const lvl = upgrades[u.id] ?? 0;
     if (lvl > 0 && !u.infinite) u.apply(s, lvl);

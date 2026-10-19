@@ -6,7 +6,7 @@ import type { RunSummary } from '../src/core/sim';
 
 const run = (o: Partial<RunSummary> = {}): RunSummary => ({
   gold: 100, gems: 2, cores: 0, depth: 40, maxDepth: 60, time: 80, bestChain: 12, bestPot: 40, level: 4,
-  boons: { overcharge: 1 }, bombs: 3, shardTypes: { glass: 12, ember: 4 }, lightPickups: 2, ores: { copper: 9 }, relics: [], seals: 0, sealsBroken: [], geodes: 0, reachedHeart: false,
+  boons: { overcharge: 1 }, bombs: 3, shardTypes: { glass: 12, ember: 4 }, lightPickups: 2, ores: { copper: 9 }, relics: [], seals: 0, milestones: [], geodes: 0, reachedHeart: false,
   reason: 'dark', ...o,
 });
 
@@ -27,7 +27,7 @@ describe('save', () => {
     }
   });
   it('repairs damaged maps instead of crashing on them', () => {
-    const r = parseSave('{"version":3,"tips":null,"achievements":"x","seenNodes":[],"stats":null,"codex":7}');
+    const r = parseSave('{"version":6,"tips":null,"achievements":"x","seenNodes":[],"stats":null,"codex":7}');
     expect(r.data.tips).toEqual({});
     expect(r.data.tips.move).toBeUndefined();
     expect(r.data.achievements).toEqual({});
@@ -37,7 +37,7 @@ describe('save', () => {
   });
   it('checks every field against the shape of a fresh save', () => {
     const r = parseSave(JSON.stringify({
-      version: 4, gold: 'lots', maxGloom: -2, sealsBroken: [300, 'x', 999, 300], credits: 'yes',
+      version: SAVE_VERSION, gold: 'lots', maxGloom: -2, milestones: ['grotto', 7, 'hollow'], credits: 'yes',
       stats: { runs: 'x', bestChain: 40, totalGold: null },
       settings: { master: 'loud', music: 0.3, flash: 1, bindings: { left: 'A', right: [], up: ['W', 3], down: ['S'] } },
       codex: { copper: 'many', tin: 4 }, achievements: { first_light: null, amber_age: 5 },
@@ -45,7 +45,7 @@ describe('save', () => {
     const base = newSave();
     expect(r.data.gold).toBe(0);
     expect(r.data.maxGloom).toBe(0);
-    expect(r.data.sealsBroken).toEqual([300]);
+    expect(r.data.milestones).toEqual(['grotto', 'hollow']);
     expect(r.data.credits).toBe(false);
     expect(r.data.stats.runs).toBe(0);
     expect(r.data.stats.bestChain).toBe(40);
@@ -60,7 +60,7 @@ describe('save', () => {
     expect(r.data.achievements).toEqual({ amber_age: 5 });
   });
   it('drops upgrade levels that are not whole non-negative numbers', () => {
-    const r = parseSave('{"version":3,"upgrades":{"bit":"x","oil":2.7,"lens":-1,"gearing":null,"diamond":3}}');
+    const r = parseSave('{"version":6,"upgrades":{"bit":"x","oil":2.7,"lens":-1,"gearing":null,"diamond":3}}');
     expect(r.data.upgrades).toEqual({ root: 1, oil: 2, diamond: 3 });
   });
   it('restores the desktop backup slot when the main save is corrupt', () => {
@@ -76,75 +76,28 @@ describe('save', () => {
       w.window = prev;
     }
   });
-  it('migrates v2 saves: combat upgrades are refunded in full', () => {
-    const v2 = {
-      version: 2, gold: 10, gems: 0, cores: 0, upgrades: { root: 1, plating: 2, juggernaut: 1, bit: 3 }, defeated: { coil: true },
-      stats: { runs: 9, kills: { moth: 40 } }, credits: true, achievements: { coil_breaker: 1, first_light: 1 },
+  it('discards an older save for a fresh one, keeping only the settings', () => {
+    const old = {
+      version: 5, gold: 777, gems: 4, cores: 1, upgrades: { root: 1, bit: 4, oldnode: 2 }, maxDepth: 790, milestones: ['amberstone'],
+      relics: ['acorn'], codex: { copper: 50 }, achievements: { first_light: 1 }, stats: { runs: 30 },
+      settings: { master: 0.3, bindings: { left: ['J'] } },
     };
-    const d = parseSave(JSON.stringify(v2)).data;
+    const d = parseSave(JSON.stringify(old)).data;
+    const fresh = newSave();
     expect(d.version).toBe(SAVE_VERSION);
-    expect(d.upgrades.plating).toBeUndefined();
-    expect(d.upgrades.juggernaut).toBeUndefined();
-    expect(d.upgrades.bit).toBe(3);
-    // plating: 180*1.35 + 180*1.85*1.35 ; juggernaut: 8000*7
-    expect(d.gold).toBe(10 + Math.round(180 * 1.35) + Math.round(180 * 1.85 * 1.35) + 8000 * 7);
-    expect(d.gems).toBe(1 + 2);
-    expect(d.cores).toBe(1);
-    expect((d as unknown as Record<string, unknown>).defeated).toBeUndefined();
-    expect(d.credits).toBe(false);
-    expect(d.achievements.coil_breaker).toBeUndefined();
-    expect(d.achievements.first_light).toBe(1);
-    expect(d.codex).toEqual({});
+    expect(d.gold).toBe(0);
+    expect(d.upgrades).toEqual({ root: 1 });
+    expect(d.maxDepth).toBe(0);
     expect(d.relics).toEqual([]);
-  });
-  it('migrates v3 saves: lifts are gone, seals you got past stay broken', () => {
-    const v3 = {
-      version: 3, gold: 77, gems: 4, cores: 1, upgrades: { root: 1, bit: 4, oil: 2 }, maxDepth: 790, stop: 'ember',
-      relics: ['oldpick', 'acorn'], codex: { copper: 50 }, achievements: { first_light: 1 }, stats: { runs: 30 },
-    };
-    const d = parseSave(JSON.stringify(v3)).data;
-    expect(d.version).toBe(SAVE_VERSION);
-    expect((d as unknown as Record<string, unknown>).stop).toBeUndefined();
-    // got below the Amber, Glimmer and Ember seals (760 + 3 rows <= 790)
-    expect(d.sealsBroken).toEqual([300, 520, 760]);
-    expect(d.maxDepth).toBe(790);
-    expect(d.gold).toBe(77);
-    expect(d.upgrades).toEqual({ root: 1, bit: 4, oil: 2 });
-    expect(d.relics).toEqual(['oldpick', 'acorn']);
-    expect(d.codex).toEqual({ copper: 50 });
-    expect(d.achievements).toEqual({ first_light: 1 });
-    // standing in a seal band is not past it
-    expect(parseSave(JSON.stringify({ ...v3, maxDepth: 301 })).data.sealsBroken).toEqual([]);
-  });
-  it('migrates v4 saves: flare and magnet nodes are refunded in full, the bomb keeps your keys', () => {
-    const v4 = {
-      version: 4, gold: 5, gems: 1, cores: 0, upgrades: { root: 1, flarecd: 2, flarep: 1, magnet: 1, magnet2: 1, bit: 3 },
-      sealsBroken: [300], maxDepth: 330, relics: ['acorn'], stats: { runs: 4, flares: 77 }, tips: { flare: true, move: true },
-      settings: { bindings: { flare: ['F'], left: ['J'] } }, achievements: { first_light: 1 },
-    };
-    const d = parseSave(JSON.stringify(v4)).data;
-    expect(d.version).toBe(SAVE_VERSION);
-    for (const id of ['flarecd', 'flarep', 'magnet', 'magnet2']) expect(d.upgrades[id]).toBeUndefined();
-    expect(d.upgrades.bit).toBe(3);
-    // list prices at removal (x3.5 economy): flarecd 20, 20*1.85; flarep 70; magnet 35; magnet2 4000 * tier 7 (+5 gems)
-    const gold = Math.round(20 * 3.5) + Math.round(20 * 1.85 * 3.5) + Math.round(70 * 3.5) + Math.round(35 * 3.5) + Math.round(4000 * 7 * 3.5);
-    expect(d.gold).toBe(5 + gold);
-    expect(d.gems).toBe(1 + 5);
-    expect(d.stats.bombs).toBe(77);
-    expect(d.settings.bindings.shardbomb).toEqual(['F']);
+    expect(d.codex).toEqual({});
+    expect(d.achievements).toEqual({});
+    expect(d.stats.runs).toBe(0);
+    expect(d.milestones).toEqual([]);
+    expect(d.settings.master).toBe(0.3);
     expect(d.settings.bindings.left).toEqual(['J']);
-    expect(d.tips.flare).toBeUndefined();
-    expect(d.tips.move).toBe(true);
-    expect(d.sealsBroken).toEqual([300]);
-    expect(d.relics).toEqual(['acorn']);
-    expect(d.achievements).toEqual({ first_light: 1 });
-    // a v3 save goes all the way through
-    const v3 = { version: 3, maxDepth: 600, stop: 'grotto', upgrades: { root: 1, magnet: 2 }, stats: { flares: 3 } };
-    const e = parseSave(JSON.stringify(v3)).data;
-    expect(e.sealsBroken).toEqual([300, 520]);
-    expect(e.upgrades.magnet).toBeUndefined();
-    expect(e.gold).toBe(Math.round(35 * 3.5) + Math.round(35 * 1.85 * 3.5));
-    expect(e.stats.bombs).toBe(3);
+    expect(d.settings.bindings.right).toEqual(fresh.settings.bindings.right);
+    // a save with no version at all is just as stale
+    expect(parseSave('{"gold":50,"upgrades":{"root":1,"bit":2}}').data.gold).toBe(0);
   });
   it('the Codex counts ores, shard types and relics (57 in all), and never takes an achievement back', () => {
     const s = newSave();
@@ -162,16 +115,6 @@ describe('save', () => {
     Save.data = was;
     expect(s.achievements.codex50).toBe(1);
   });
-  it('migrates v1 saves', () => {
-    const v1 = { version: 1, gold: 50, upgrades: { root: 1, oil: 2 }, settings: { master: 0.5 }, stats: { runs: 3 } };
-    const d = parseSave(JSON.stringify(v1)).data;
-    expect(d.version).toBe(SAVE_VERSION);
-    expect(d.settings.crt).toBe(false);
-    expect(d.settings.master).toBe(0.5);
-    expect(d.stats.runs).toBe(3);
-    expect(d.stats.endless).toBe(0);
-    expect(d.settings.bindings.left.length).toBeGreaterThan(0);
-  });
 });
 
 describe('banking', () => {
@@ -187,15 +130,15 @@ describe('banking', () => {
     bankRun(s, run({ maxDepth: 130, relics: ['oldpick'] }));
     expect(s.relics).toEqual(['oldpick']);
   });
-  it('broken seals are banked once each and stay broken', () => {
+  it('layer milestones are banked once each and stay claimed', () => {
     const s = newSave();
-    bankRun(s, run({ maxDepth: 330, seals: 1, sealsBroken: [300] }));
-    expect(s.sealsBroken).toEqual([300]);
-    bankRun(s, run({ maxDepth: 540, seals: 1, sealsBroken: [520, 300] }));
-    expect(s.sealsBroken).toEqual([300, 520]);
-    // even a dig that ends in the dark keeps its seal
-    bankRun(s, run({ maxDepth: 770, seals: 1, sealsBroken: [760], reason: 'dark' }));
-    expect(s.sealsBroken).toEqual([300, 520, 760]);
+    bankRun(s, run({ maxDepth: 330, milestones: ['amberstone'] }));
+    expect(s.milestones).toEqual(['amberstone']);
+    bankRun(s, run({ maxDepth: 540, milestones: ['grotto', 'amberstone'] }));
+    expect(s.milestones).toEqual(['amberstone', 'grotto']);
+    // even a dig that ends in the dark keeps what it reached
+    bankRun(s, run({ maxDepth: 770, milestones: ['emberdeep'], reason: 'dark' }));
+    expect(s.milestones).toEqual(['amberstone', 'grotto', 'emberdeep']);
   });
   it("reaching the Heart plays the finale once and opens Deep Pressure", () => {
     const s = newSave();
