@@ -3,7 +3,7 @@
 ## Automated checks
 | Command | What it covers |
 |---|---|
-| `npm test` | 104 Vitest tests, listed below |
+| `npm test` | 105 Vitest tests, listed below |
 | `npm run sim -- 600 [--build=<playstyle>] [--boons=<family>] [--grant=<boon>]` | A bot plays consecutive digs from the surface, shopping between digs by a playstyle's priorities. Logs time to every 100 m band, how long the first pass took to cross each band, plain-rock hits to break (drill and shard), the share of tiles shards broke, fuel burn inside and outside chains, and the stall gap. Env: `SIM_SEED=<offset>`, `BAL_ECON`, `BAL_ROCK`, `BAL_GOLDFLAT`, `BAL_SHARDDMG`, `BAL_DRAIN` override the dials in `src/data/balance.ts` |
 | `npm run sim:boons [-- --max]` | What each boon is worth: a mid-game build starts a dig with one stack (or all stacks) and skips every other hand; depth, gold, length and tiles broken against a dig with no boon |
 | `node tools/qa/soak.mjs 45` | Browser soak test: autoplay at 12 depths, from the surface through the Heart and the endless depths, failing on any page error |

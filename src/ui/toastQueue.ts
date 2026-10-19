@@ -43,7 +43,8 @@ export class ToastQueue {
   /** how many toasts are waiting (a batch counts as one) */
   get waiting(): number {
     const ach = this.items.filter((t) => t.kind === 'achievement').length;
-    return this.items.length - (ach >= BATCH_AT ? ach - 1 : 0);
+    const shards = this.items.filter((t) => t.kind === 'shard').length;
+    return this.items.length - (ach >= BATCH_AT ? ach - 1 : 0) - (shards >= BATCH_AT ? shards - 1 : 0);
   }
 
   /** the next toast to show, or null */
@@ -52,6 +53,13 @@ export class ToastQueue {
     if (ach.length >= BATCH_AT) {
       this.items = this.items.filter((t) => t.kind !== 'achievement');
       return { kind: 'batch', title: `${ach.length} achievements!`, sub: 'Click to see them', icon: 'star', count: ach.length };
+    }
+    // a burst of first-time shard types (a big cascade can show several at once) is one line, not a queue
+    const shards = this.items.filter((t) => t.kind === 'shard');
+    if (shards.length >= BATCH_AT) {
+      this.items = this.items.filter((t) => t.kind !== 'shard');
+      const names = shards.map((t) => t.title.replace(/^[^:]*: /, '')).join(', ');
+      return { kind: 'shard', title: `${shards.length} NEW SHARDS`, sub: names, icon: shards[0].icon, tint: shards[0].tint, count: shards.length };
     }
     return this.items.shift() ?? null;
   }

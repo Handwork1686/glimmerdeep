@@ -37,6 +37,23 @@ describe('toasts', () => {
     expect(five.take()).toBeNull();
   });
 
+  it('a burst of new shard types is one toast, not a queue', () => {
+    const q = new ToastQueue();
+    for (const n of ['Glass Shard', 'Ember Shard', 'Fault Shard', 'Vein Shard']) q.push({ kind: 'shard', title: `NEW SHARD: ${n}`, sub: 'x' });
+    q.push(achievementToast(ACHIEVEMENTS[0]));
+    expect(q.waiting).toBe(2);
+    const first = q.take()!;
+    expect(first.title).toBe('4 NEW SHARDS');
+    expect(first.sub).toBe('Glass Shard, Ember Shard, Fault Shard, Vein Shard');
+    expect(q.take()!.kind).toBe('achievement');
+    expect(q.take()).toBeNull();
+    // two stay separate
+    const two = new ToastQueue();
+    two.push({ kind: 'shard', title: 'NEW SHARD: A', sub: 'a' });
+    two.push({ kind: 'shard', title: 'NEW SHARD: B', sub: 'b' });
+    expect(two.take()!.title).toBe('NEW SHARD: A');
+  });
+
   it('sit bottom-left, above the level bar, clear of the currency row and the chain counter', () => {
     expect(TOAST_Y + TOAST_H).toBeLessThanOrEqual(VIEW_H - TOAST_BOTTOM_GAP);
     expect(TOAST_BOTTOM_GAP).toBeGreaterThanOrEqual(34);
