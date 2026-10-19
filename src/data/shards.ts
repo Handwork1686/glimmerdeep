@@ -7,6 +7,8 @@
  * Every type reads the same global shard stats (count, damage, speed, pierce,
  * split, burst size); the numbers here only give each type its own flavour.
  */
+import { rockHp } from '../core/rock';
+
 export type ShardId = 'glass' | 'crystal' | 'ember' | 'cinnabar' | 'geode' | 'vein' | 'fault' | 'cataclysm' | 'void' | 'prism' | 'rune';
 
 export interface ShardType {
@@ -71,7 +73,11 @@ export const BASE_SHARD_DAMAGE = 6;
 export const MAX_PER_BURST = 28;
 /** at most this many shards in flight; extra count turns into damage */
 export const MAX_ACTIVE_SHARDS = 300;
-/** shards keep pace with harder rock the deeper they fly */
-export const shardDepthScale = (depth: number) => 1 + Math.max(0, depth) / 250;
+/**
+ * Shards grow with the square root of how much harder the rock gets: they keep up
+ * with it, but slowly fall behind, so deep rock always takes more than one shard
+ * (about 23x at the Heart; upgrades and drill-fed shards make up the difference).
+ */
+export const shardDepthScale = (depth: number) => Math.sqrt(rockHp(Math.max(0, depth)) / rockHp(0));
 /** Codex key for a shard type */
 export const shardCodexKey = (id: ShardId) => `shard_${id}`;

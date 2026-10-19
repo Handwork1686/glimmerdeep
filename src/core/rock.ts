@@ -7,7 +7,7 @@ import { TILES } from '../data/tiles';
  * Past the Heart it keeps climbing at the same slope, so the endless depths never
  * go soft.
  */
-const ANCHORS: [number, number][] = [[0, 2.2], [50, 4.9], [100, 9], [150, 18], [400, 55], [640, 110], [900, 450], [1270, 800], [1500, 1100]];
+const ANCHORS: [number, number][] = [[0, 2.2], [50, 4.4], [100, 7.4], [150, 18], [400, 55], [640, 110], [900, 450], [1270, 800], [1500, 1100]];
 const END_SLOPE = 1.5;
 
 const slopes = (() => {

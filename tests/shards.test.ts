@@ -82,7 +82,7 @@ describe('the shard family', () => {
     built.step({ ...NO_INPUT, shardBomb: true });
     expect(bare.summary().bombs).toBe(1);
     expect(built.shards.length).toBeGreaterThan(bare.shards.length * 1.5);
-    expect(built.shards[0].dmg).toBeGreaterThan(bare.shards[0].dmg * 2);
+    expect(built.shards[0].dmg).toBeGreaterThan(bare.shards[0].dmg * 1.7);
     // and it recharges before it can go again
     const n = built.shards.length;
     built.step({ ...NO_INPUT, shardBomb: true });

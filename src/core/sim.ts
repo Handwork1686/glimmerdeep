@@ -199,12 +199,27 @@ const STEER_RATE = 5;
 const CRYSTAL_SHARDS = new Set<ShardId>(['glass', 'crystal', 'void', 'prism']);
 const CORNER_ASSIST = [-1, -2, -3, -4, 1, 2, 3, 4];
 const CORNER_ASSIST_AIR = [-1, -2, -3, -4, -5, -6, 1, 2, 3, 4, 5, 6];
-/** chain pot multiplier for a chain of n links: grows with the square root, then (past 1500 links) only slowly */
-export const POT_SOFTCAP = 1500;
+/**
+ * Chain pot multiplier for a chain of n links. It grows with the square root up
+ * to 500 links, then only logarithmically, and a soft cap keeps it under x8 no
+ * matter how long the chain or how many pot nodes you own.
+ */
+export const POT_KNEE = 500;
+export const POT_MAX = 8;
 export function potMultiplier(n: number, growth: number): number {
-  const k = n <= POT_SOFTCAP ? Math.sqrt(n) : Math.sqrt(POT_SOFTCAP) + 4 * Math.log(n / POT_SOFTCAP);
-  return 1 + growth * k;
+  const raw = 1 + growth * Math.sqrt(Math.min(n, POT_KNEE)) + growth * 4 * Math.log(Math.max(1, n / POT_KNEE));
+  return 1 + (POT_MAX - 1) * (1 - Math.exp(-(raw - 1) / (POT_MAX - 1)));
 }
+/** a fast chain of drill breaks costs a little more fuel */
+export const THROUGHPUT_WINDOW = 3;
+export const THROUGHPUT_PER_BREAK = 0.015;
+export const THROUGHPUT_MAX = 1.4;
+/** chains cool off this much faster when the Wick stands still */
+export const IDLE_CHAIN_DECAY = 3;
+/** a tile a shard breaks this far from the Wick throws no further shards */
+export const SHARD_LEASH = 12 * TILE;
+/** the most fuel shard breaks (Fuel Recycler, Shardlight) restore per second */
+export const SHARD_FUEL_CAP = 2;
 
 /**
  * The lantern burns faster the deeper you are: about as forgiving as ever in the
@@ -291,6 +306,18 @@ export class Sim {
   secondWindsUsed = 0;
   /** when the last tile broke (for the stall drain) */
   lastBreakT = 0;
+  /** is the Wick standing still, not drilling? (chains cool off) */
+  idle = false;
+  /** recent drill breaks, for the throughput drain */
+  private drillBreakTimes: number[] = [];
+  private drillBreaks = 0;
+  private shardBreaks = 0;
+  /** fuel shard breaks may still restore right now (refills at SHARD_FUEL_CAP per second) */
+  private shardFuelBudget = SHARD_FUEL_CAP;
+  /** tiles broken, by what broke them (balance telemetry) */
+  breaksBy: Record<string, number> = {};
+  /** seconds and fuel burned inside a chain and outside one (balance telemetry) */
+  drainSplit = { chainT: 0, chainFuel: 0, freeT: 0, freeFuel: 0 };
   /** current stall drain multiplier (1 = not stalled) */
   stallMul = 1;
   private currentBiome = '';
@@ -412,9 +439,15 @@ export class Sim {
   /** fuel burned per second right now (depth, pressure, stall and Last Light included) */
   drainRate(): number {
     // drain reductions stack, but never below DRAIN_FLOOR: the deep always bites
-    let drain = Math.max(DRAIN_FLOOR, this.stats.lightDrain) * this.gloom.drainMul * drainCurve(this.depth()) * this.stallMul;
+    let drain = Math.max(DRAIN_FLOOR, this.stats.lightDrain) * this.gloom.drainMul * drainCurve(this.depth()) * this.stallMul * this.throughputMul();
     if (this.stats.lastLight && this.lightFrac() < 0.25) drain *= 0.5;
     return drain;
+  }
+
+  /** drill breaks in the last few seconds make the lantern burn a little faster (shard breaks do not count) */
+  throughputMul(): number {
+    const perSec = this.drillBreakTimes.length / THROUGHPUT_WINDOW;
+    return Math.min(THROUGHPUT_MAX, 1 + THROUGHPUT_PER_BREAK * perSec);
   }
 
   lightFrac(): number {
@@ -456,6 +489,7 @@ export class Sim {
     const def = TILES[tile];
     if (tile === T.air || def.unbreakable) return false;
     const mult = def.ore ? this.stats.oreMul : this.stats.rockMul;
+    if (src === 'shard' && def.ore) dmg *= this.stats.shardOreMul;
     const left = this.world.hp(x, y) - dmg * mult;
     this.world.setHp(x, y, left);
     if (left <= 0) {
@@ -471,11 +505,18 @@ export class Sim {
     const def = TILES[tile];
     this.world.set(x, y, T.air);
     this.lastBreakT = this.time;
-    // every cascade break is a link; so is every ore, crystal or gem you drill
+    // every cascade break is a link, and so is every drill break: the drill keeps the chain going
     const cascade = src === 'shard' || src === 'wave';
+    const fromDrill = src === 'drill';
     const valuable = this.isValuable(tile) || tile === T.seal || tile === T.geode;
-    const linked = cascade || valuable;
-    if (linked) this.link();
+    const linked = cascade || valuable || fromDrill;
+    this.breaksBy[src] = (this.breaksBy[src] ?? 0) + 1;
+    if (linked) this.link(fromDrill);
+    const p = this.player;
+    // a shard that breaks something far from the Wick sets nothing else off: the chain needs you nearby
+    const leashed = src === 'shard' && Math.hypot(x * TILE + 8 - p.x, y * TILE + 8 - p.y) > SHARD_LEASH;
+    if (fromDrill) this.drillBreak();
+    if (src === 'shard') this.shardBreak(depthOfRow(y));
     this.emit({ t: 'tile', x, y });
     this.emit({ t: 'break', x, y, tile, src, chain: linked ? this.chain : 0 });
     // plain rock knocked loose by a cascade teaches you little: XP comes from what you dig and what you find
@@ -524,13 +565,15 @@ export class Sim {
     if (tile === T.seal) this.ribbonBreak(x, y, cx, cy, depth, gen);
     if (tile === T.worldheart) this.breakHeart(cx, cy);
     // shard sources: everything resolves through spawnShards
-    if (tile === T.geode) this.geodeVolley(cx, cy, depth, gen);
+    if (leashed) {
+      // too far from the Wick: the tile still pays out, but sets nothing else off
+    } else if (tile === T.geode) this.geodeVolley(cx, cy, depth, gen);
     else if (def.shards) this.spawnShards(cx, cy, def.shardType ?? 'glass', def.shards, { power: def.shardPower, gen });
     // fault shards never crack more fault lines: plain rock would cascade forever
     else if (!def.ore && !def.light && tile !== T.seal && by !== 'fault' && gen <= 1 && this.stats.faultChance > 0 && this.rng.chance(Math.min(0.3, this.stats.faultChance))) {
       this.spawnShards(cx, cy, 'fault', 2, { gen });
     }
-    if (def.ore && by !== 'vein' && this.stats.veinRupture > 0 && this.rng.chance(Math.min(0.9, this.stats.veinRupture))) this.rupture(x, y, tile);
+    if (!leashed && def.ore && by !== 'vein' && this.stats.veinRupture > 0 && this.rng.chance(Math.min(0.9, this.stats.veinRupture))) this.rupture(x, y, tile);
     // something above may fall
     this.checkFall(x, y - 1);
   }
@@ -540,9 +583,55 @@ export class Sim {
     return !!(d.ore || d.shards || d.gems || tile === T.relic || tile === T.worldheart);
   }
 
-  private link() {
+  /** a drill break: every tenth throws a cone of glass shards the way the drill is pointing */
+  private drillBreak() {
+    this.drillBreaks++;
+    this.drillBreakTimes.push(this.time);
+    if (this.drillBreaks % Math.max(3, Math.round(this.stats.drillShardEvery)) === 0) this.drillVolley();
+  }
+
+  /** glass shards from the drill: along its direction, or toward a valuable tile just ahead */
+  private drillVolley(n?: number) {
+    const p = this.player;
+    const s = this.stats;
+    const dir = p.drill;
+    if (!dir) return;
+    let a = dir === 'right' ? 0 : dir === 'left' ? Math.PI : dir === 'down' ? Math.PI / 2 : -Math.PI / 2;
+    // drilling next to ore nudges the volley toward it
+    const px = Math.floor(p.x / TILE);
+    const py = Math.floor(p.y / TILE);
+    let bd = 1e9;
+    for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+      if (!this.isValuable(this.tileAt(px + dx, py + dy))) continue;
+      const d = dx * dx + dy * dy;
+      if (d > 0 && d < bd) {
+        bd = d;
+        a = Math.atan2(dy, dx);
+      }
+    }
+    const count = n ?? 2 + Math.round(s.shardBonus / 2) + s.drillShardBonus;
+    this.spawnShards(p.x, p.y, 'glass', count, { angle: a, spread: 0.9, exact: true });
+  }
+
+  /** a shard break: Fuel Recycler restores a little fuel, inside the shared per-second cap */
+  private shardBreak(depth: number) {
+    this.shardBreaks++;
+    if (this.stats.shardFuel > 0) this.shardFuel(this.stats.shardFuel * deepTaper(depth), 'recycler');
+  }
+
+  /** every fuel source that comes from shard breaks goes through here: tapered by the caller, capped at SHARD_FUEL_CAP per second */
+  shardFuel(amount: number, src: string) {
+    const give = Math.min(amount, this.shardFuelBudget);
+    if (give <= 0) return;
+    this.shardFuelBudget -= give;
+    this.addLight(give, src);
+  }
+
+  private link(fromDrill = false) {
     this.chain++;
-    this.chainTimer = this.stats.chainTime;
+    // standing still, a chain cools off fast; every drill break buys a little extra time
+    const base = this.stats.chainTime * (this.idle ? 1 / IDLE_CHAIN_DECAY : 1);
+    this.chainTimer = fromDrill ? Math.min(this.stats.chainTime * 2, base + 0.25 + this.stats.chainKeeper) : base;
     this.bestChain = Math.max(this.bestChain, this.chain);
     // long chains refuel a little less per link, so a dig still ends
     this.addLight(chainRefuel(this.stats.chainFuel, this.chain, this.depth()), 'chain');
@@ -572,6 +661,8 @@ export class Sim {
       // Midas Lamp: a big pot also pays out in gems
       if (this.stats.midas) this.gems += Math.min(25, Math.floor(bonus / 400));
       this.bestPot = Math.max(this.bestPot, this.potGold + bonus);
+      // Midas Lamp: a paid-out pot throws a volley of shards
+      if (this.stats.midas && !this.over) this.spawnShards(this.player.x, this.player.y, 'glass', 4, { gen: 1 });
       this.emit({ t: 'chainEnd', count: this.chain, pot: this.potGold, mult, bonus });
     }
     this.chain = 0;
@@ -881,13 +972,24 @@ export class Sim {
     this.time += dt;
     const p = this.player;
     this.stepPlayer(input, dt);
+    this.idle = p.drill === null && p.grounded && !input.left && !input.right && !input.up && !input.down;
+    this.shardFuelBudget = Math.min(SHARD_FUEL_CAP, this.shardFuelBudget + SHARD_FUEL_CAP * dt);
+    while (this.drillBreakTimes.length && this.drillBreakTimes[0] < this.time - THROUGHPUT_WINDOW) this.drillBreakTimes.shift();
 
     // light drain
     // drilling and breaking nothing (no chain alive either): the lantern won't wait
     const stalled = p.drill !== null && this.chain === 0 && this.time - this.lastBreakT > STALL_GRACE;
     const target = stalled ? Math.min(STALL_MAX, 1 + (this.time - this.lastBreakT - STALL_GRACE) * (STALL_MAX - 1)) : 1;
     this.stallMul += (target - this.stallMul) * Math.min(1, dt * 6);
-    this.light -= this.drainRate() * dt;
+    const burn = this.drainRate() * dt;
+    this.light -= burn;
+    if (this.chain > 0) {
+      this.drainSplit.chainT += dt;
+      this.drainSplit.chainFuel += burn;
+    } else {
+      this.drainSplit.freeT += dt;
+      this.drainSplit.freeFuel += burn;
+    }
     if (this.light <= 0) {
       if (this.stats.secondWind - this.secondWindsUsed > 0) {
         this.secondWindsUsed++;
@@ -917,7 +1019,7 @@ export class Sim {
     // the chain holds while the drill is chewing something valuable
     const chewing = p.drillTarget && this.isValuable(this.tileAt(p.drillTarget.x, p.drillTarget.y));
     if (this.chainTimer > 0) {
-      if (!chewing) this.chainTimer -= dt;
+      if (!chewing) this.chainTimer -= dt * (this.idle ? IDLE_CHAIN_DECAY : 1);
       if (this.chainTimer <= 0) this.cashOut();
     }
     // timed shatters (seal waves, the heart)
@@ -1116,7 +1218,7 @@ export class Sim {
         const rate = s.drillRate * (1 + p.heat * s.heatMax);
         const mult = def.ore ? s.oreMul : s.rockMul;
         const left = this.world.hp(tx, ty);
-        if (p.plowCd <= 0 && left <= s.drillPower * s.plow * mult) {
+        if (p.plowCd <= 0 && left <= s.drillPower * s.plow * mult * 0.5) {
           // overpowered: soft rock gives way on contact
           p.plowCd = 0.035;
           p.hitCount++;
@@ -1129,7 +1231,10 @@ export class Sim {
             p.drillTimer -= interval;
             p.hitCount++;
             let dmg = s.drillPower;
-            if (s.echoEvery > 0 && p.hitCount % s.echoEvery === 0) dmg *= 3;
+            if (s.echoEvery > 0 && p.hitCount % s.echoEvery === 0) {
+              dmg *= 3;
+              if (s.echoShard) this.drillVolley(1);
+            }
             this.drillStrike(tx, ty, want!, dmg);
           }
         }

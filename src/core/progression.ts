@@ -1,9 +1,13 @@
+import { BASE_SHARD_DAMAGE } from '../data/shards';
 import { BOON_BY_ID, BOONS, BoonDef, RARITY_WEIGHT } from '../data/boons';
 import { RELIC_BY_ID } from '../data/relics';
 import { UPGRADES } from '../data/upgrades';
 import { Rng } from './rng';
 import { MILESTONE_FUEL } from './constants';
 import { baseStats, Stats } from './stats';
+
+/** diminishing returns: ~x for small x, then a slow logarithmic climb (k sets the knee) */
+export const dr = (x: number, k: number) => (x <= 0 ? x : k * Math.log(1 + x / k));
 
 export { baseHpMean, hpCurve, rockHp } from './rock';
 
@@ -64,6 +68,12 @@ export function computeStats(upgrades: Record<string, number>, boons: Record<str
     const lvl = upgrades[u.id] ?? 0;
     if (lvl > 0 && u.infinite) u.apply(s, lvl);
   }
+  // every stack that used to snowball tapers here, after all sources, so no single node doubles output
+  s.shardDamage = BASE_SHARD_DAMAGE * (1 + dr(s.shardDamage / BASE_SHARD_DAMAGE - 1, 1.5));
+  s.shardBonus = dr(s.shardBonus, 4);
+  s.burstBonus = dr(s.burstBonus, 0.6);
+  s.goldMul = 1 + dr(s.goldMul - 1, 2);
+  s.drillShardEvery = Math.max(3, s.drillShardEvery);
   return s;
 }
 
